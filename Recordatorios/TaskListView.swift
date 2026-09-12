@@ -4,6 +4,9 @@ struct TaskListView: View {
     @ObservedObject var store: TaskStore
     @State private var newTitle = ""
 
+    /// Con pocas tareas dejamos crecer el popover; a partir de aqui scrollea.
+    private let maxVisibleRows = 8
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -21,37 +24,13 @@ struct TaskListView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 12)
+            } else if store.items.count > maxVisibleRows {
+                // Altura definida: un ScrollView con solo maxHeight colapsa a 0
+                // dentro de un MenuBarExtra(.window), que se autodimensiona.
+                ScrollView { taskRows }
+                    .frame(height: 280)
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach($store.items) { $item in
-                            HStack(spacing: 8) {
-                                Button {
-                                    item.isDone.toggle()
-                                } label: {
-                                    Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(item.isDone ? .green : .secondary)
-                                }
-                                .buttonStyle(.plain)
-
-                                Text(item.title)
-                                    .strikethrough(item.isDone)
-                                    .foregroundStyle(item.isDone ? .secondary : .primary)
-
-                                Spacer()
-
-                                Button {
-                                    store.remove(item)
-                                } label: {
-                                    Image(systemName: "xmark")
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.tertiary)
-                            }
-                        }
-                    }
-                }
-                .frame(maxHeight: 280)
+                taskRows
             }
 
             Divider()
@@ -70,6 +49,36 @@ struct TaskListView: View {
         }
         .padding(12)
         .frame(width: 320)
+    }
+
+    private var taskRows: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach($store.items) { $item in
+                HStack(spacing: 8) {
+                    Button {
+                        item.isDone.toggle()
+                    } label: {
+                        Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(item.isDone ? .green : .secondary)
+                    }
+                    .buttonStyle(.plain)
+
+                    Text(item.title)
+                        .strikethrough(item.isDone)
+                        .foregroundStyle(item.isDone ? .secondary : .primary)
+
+                    Spacer()
+
+                    Button {
+                        store.remove(item)
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tertiary)
+                }
+            }
+        }
     }
 }
 
