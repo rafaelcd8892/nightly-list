@@ -3,6 +3,11 @@ import Foundation
 
 @MainActor
 final class TaskStore: ObservableObject {
+    /// El popover y la ventana de captura rapida tienen que ver la misma
+    /// lista, y el panel se abre desde el handler del atajo, fuera de
+    /// cualquier jerarquia de vistas.
+    static let shared = TaskStore()
+
     @Published var items: [TodoItem] = [] {
         didSet {
             save()

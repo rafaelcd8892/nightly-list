@@ -6,12 +6,13 @@
 //
 
 import SwiftUI
+import Carbon.HIToolbox
 import UserNotifications
 
 @main
 struct RecordatoriosApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var store = TaskStore()
+    @StateObject private var store = TaskStore.shared
 
     var body: some Scene {
         MenuBarExtra {
@@ -48,8 +49,18 @@ struct RecordatoriosApp: App {
 /// Solo existe para recibir las notificaciones: sin delegado, macOS se come el
 /// aviso cuando la app esta activa (que es justo cuando el popover esta abierto).
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    private let quickAdd = QuickAddPanel()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
+
+        // Option+Espacio abre la captura rapida.
+        HotKeyCenter.shared.register(
+            keyCode: UInt32(kVK_Space),
+            modifiers: UInt32(optionKey)
+        ) { [quickAdd] in
+            quickAdd.toggle()
+        }
     }
 
     func userNotificationCenter(
