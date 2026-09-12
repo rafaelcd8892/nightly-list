@@ -2,7 +2,9 @@ import SwiftUI
 
 struct TaskListView: View {
     @ObservedObject var store: TaskStore
+    @StateObject private var loginItem = LoginItem()
     @State private var newTitle = ""
+    @State private var loginError: String?
 
     /// Con pocas tareas dejamos crecer el popover; a partir de aqui scrollea.
     private let maxVisibleRows = 8
@@ -46,9 +48,24 @@ struct TaskListView: View {
                     .font(.caption)
                     .keyboardShortcut("q")
             }
+
+            Toggle("Abrir al iniciar sesión", isOn: Binding(
+                get: { loginItem.isEnabled },
+                set: { loginError = loginItem.setEnabled($0) }
+            ))
+            .toggleStyle(.checkbox)
+            .font(.caption)
+
+            if let loginError {
+                Text(loginError)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(12)
         .frame(width: 320)
+        .onAppear { loginItem.refresh() }
     }
 
     private var taskRows: some View {
