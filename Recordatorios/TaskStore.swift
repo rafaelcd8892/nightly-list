@@ -3,11 +3,21 @@ import Foundation
 
 @MainActor
 final class TaskStore: ObservableObject {
-    @Published var items: [TodoItem] = [] { didSet { save() } }
+    @Published var items: [TodoItem] = [] {
+        didSet {
+            save()
+            ReminderScheduler.shared.sync(items)
+        }
+    }
 
     private let key = "todo.items"
 
-    init() { load() }
+    init() {
+        load()
+        // Al arrancar puede haber notificaciones huerfanas de una sesion
+        // anterior, o fechas que ya pasaron con el Mac apagado.
+        ReminderScheduler.shared.sync(items)
+    }
 
     var pendingCount: Int { items.filter { !$0.isDone }.count }
 

@@ -6,9 +6,11 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 @main
 struct RecordatoriosApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = TaskStore()
 
     var body: some Scene {
@@ -40,5 +42,20 @@ struct RecordatoriosApp: App {
         // Plantilla: el sistema lo recolorea segun la barra clara u oscura.
         image.isTemplate = true
         return image
+    }
+}
+
+/// Solo existe para recibir las notificaciones: sin delegado, macOS se come el
+/// aviso cuando la app esta activa (que es justo cuando el popover esta abierto).
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
     }
 }
