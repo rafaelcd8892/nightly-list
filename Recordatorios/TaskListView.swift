@@ -52,6 +52,11 @@ struct TaskListView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
+                if store.canUndo {
+                    Button("Deshacer") { store.undoRemoval() }
+                        .font(.caption)
+                        .keyboardShortcut("z")
+                }
                 Button("Limpiar hechas") { store.clearDone() }
                     .font(.caption)
                 Button("Salir") { NSApplication.shared.terminate(nil) }
@@ -74,7 +79,9 @@ struct TaskListView: View {
             }
         }
         .padding(12)
-        .frame(width: 320)
+        // 360 y no 320: con el boton Deshacer visible, el footer truncaba
+        // "Limpiar hechas" a "Limpiar h...".
+        .frame(width: 360)
         .onAppear { loginItem.refresh() }
     }
 
@@ -126,6 +133,8 @@ private extension TaskListView {
 /// bindings de ForEach.
 private struct TaskRow: View {
     @Binding var item: TodoItem
+    @State private var draftTitle: String?
+    @FocusState private var titleFocused: Bool
     let isEditingDate: Bool
     let onToggleDateEditor: () -> Void
     let onDueDateChanged: () -> Void
@@ -143,9 +152,26 @@ private struct TaskRow: View {
                 .buttonStyle(.plain)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(item.title)
-                        .strikethrough(item.isDone)
-                        .foregroundStyle(item.isDone ? Color.secondary : Color.primary)
+                    if let draftTitle {
+                        TextField("", text: Binding(
+                            get: { draftTitle },
+                            set: { self.draftTitle = $0 }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        .focused($titleFocused)
+                        .onSubmit(commitTitle)
+                        .onExitCommand { self.draftTitle = nil }
+                        .onChange(of: titleFocused) { _, focused in
+                            // Clic fuera: se guarda, como en Finder.
+                            if !focused { commitTitle() }
+                        }
+                    } else {
+                        Text(item.title)
+                            .strikethrough(item.isDone)
+                            .foregroundStyle(item.isDone ? Color.secondary : Color.primary)
+                            .onTapGesture(count: 2) { startEditingTitle() }
+                            .help("Doble clic para renombrar")
+                    }
 
                     if let dueDate = item.dueDate {
                         Text(dueDate.formatted(date: .abbreviated, time: .shortened))
@@ -182,6 +208,22 @@ private struct TaskRow: View {
                 .padding(.leading, 24)
             }
         }
+    }
+
+    private func startEditingTitle() {
+        draftTitle = item.title
+        titleFocused = true
+    }
+
+    /// Un titulo en blanco no se guarda: se descarta la edicion y la tarea
+    /// conserva el nombre que tenia.
+    private func commitTitle() {
+        guard let draftTitle else { return }
+        let trimmed = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            item.title = trimmed
+        }
+        self.draftTitle = nil
     }
 
     /// El selector necesita una fecha no opcional.
