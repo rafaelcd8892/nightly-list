@@ -9,9 +9,14 @@ import SwiftUI
 
 @main
 struct RecordatoriosApp: App {
+    @StateObject private var store = TaskStore()
+
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        MenuBarExtra {
+            TaskListView(store: store)
+        } label: {
+            Label("\(store.pendingCount)", systemImage: "checklist")
         }
+        .menuBarExtraStyle(.window)
     }
 }
