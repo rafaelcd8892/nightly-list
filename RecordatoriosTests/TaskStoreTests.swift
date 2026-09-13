@@ -230,4 +230,36 @@ final class TaskStoreTests: XCTestCase {
 
         XCTAssertEqual(store.items[0].completedAt, first)
     }
+
+    // MARK: - Anotar algo ya hecho (⌘Enter)
+
+    func testAddCompletedStampsTheTaskAsDoneRightAway() {
+        let store = makeStore()
+
+        store.addCompleted("Ya lo hice")
+
+        XCTAssertEqual(store.items.map(\.title), ["Ya lo hice"])
+        XCTAssertTrue(store.items[0].isDone)
+        XCTAssertNotNil(store.items[0].completedAt)
+        XCTAssertEqual(store.pendingCount, 0, "no cuenta como pendiente")
+    }
+
+    func testAddCompletedTrimsAndIgnoresBlanks() {
+        let store = makeStore()
+
+        store.addCompleted("  Con espacios  ")
+        store.addCompleted("   ")
+
+        XCTAssertEqual(store.items.map(\.title), ["Con espacios"])
+    }
+
+    /// Lo anotado con ⌘Enter tiene que salir en el registro del dia.
+    func testAddCompletedShowsUpInTodaysReport() {
+        let store = makeStore()
+        store.addCompleted("Del tirón")
+
+        let report = DayReport(items: store.items, archived: store.archived)
+
+        XCTAssertEqual(report.completed.map(\.title), ["Del tirón"])
+    }
 }

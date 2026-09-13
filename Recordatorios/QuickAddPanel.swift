@@ -84,7 +84,18 @@ private struct QuickAddView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 20))
                 .focused($focused)
-                .onSubmit(save)
+                .onSubmit { save(alreadyDone: false) }
+
+            Text("⌘⏎ hecha")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            // Un boton oculto es la forma de colgar un atajo de teclado de
+            // una accion que no tiene sitio en la interfaz.
+            Button("") { save(alreadyDone: true) }
+                .keyboardShortcut(.return, modifiers: .command)
+                .hidden()
+                .frame(width: 0, height: 0)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
@@ -93,13 +104,21 @@ private struct QuickAddView: View {
         .onAppear { focused = true }
     }
 
-    private func save() {
+    /// alreadyDone distingue las dos formas de cerrar el panel: Enter apunta
+    /// una tarea pendiente, ⌘Enter registra algo que ya esta hecho.
+    private func save(alreadyDone: Bool) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             onClose()
             return
         }
-        store.add(trimmed)
+
+        if alreadyDone {
+            store.addCompleted(trimmed)
+        } else {
+            store.add(trimmed)
+        }
+
         title = ""
         onClose()
     }

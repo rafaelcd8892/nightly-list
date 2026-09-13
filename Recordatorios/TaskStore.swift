@@ -77,9 +77,22 @@ final class TaskStore: ObservableObject {
     var canUndo: Bool { !lastRemoval.isEmpty }
 
     func add(_ title: String) {
-        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty else { return }
-        items.append(TodoItem(title: t))
+        append(title, completedAt: nil)
+    }
+
+    /// Apunta algo que ya esta terminado, para el caso de "esto lo acabo de
+    /// hacer y quiero que conste". Es la via del ⌘Enter en la captura rapida.
+    func addCompleted(_ title: String) {
+        append(title, completedAt: Date())
+    }
+
+    private func append(_ title: String, completedAt: Date?) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        var item = TodoItem(title: trimmed)
+        item.completedAt = completedAt
+        items.append(item)
     }
 
     func remove(_ item: TodoItem) {
