@@ -46,6 +46,13 @@ struct TaskListView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            if let storageError = store.storageError {
+                Text(storageError)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Divider()
 
             HStack {

@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		AA0000000000000000000014 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5355CCA63054EC4C00B0101B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5355CCAD3054EC4C00B0101B;
+			remoteInfo = Recordatorios;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		5355CCAE3054EC4C00B0101B /* Recordatorios.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Recordatorios.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA000000000000000000000B /* RecordatoriosTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RecordatoriosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +27,22 @@
 			path = Recordatorios;
 			sourceTree = "<group>";
 		};
+		AA000000000000000000000F /* RecordatoriosTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = RecordatoriosTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		5355CCAB3054EC4C00B0101B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA000000000000000000000D /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				5355CCB03054EC4C00B0101B /* Recordatorios */,
+				AA000000000000000000000F /* RecordatoriosTests */,
 				5355CCAF3054EC4C00B0101B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				5355CCAE3054EC4C00B0101B /* Recordatorios.app */,
+				AA000000000000000000000B /* RecordatoriosTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +95,29 @@
 			productReference = 5355CCAE3054EC4C00B0101B /* Recordatorios.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AA000000000000000000000A /* RecordatoriosTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000010 /* Build configuration list for PBXNativeTarget "RecordatoriosTests" */;
+			buildPhases = (
+				AA000000000000000000000C /* Sources */,
+				AA000000000000000000000D /* Frameworks */,
+				AA000000000000000000000E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA0000000000000000000013 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AA000000000000000000000F /* RecordatoriosTests */,
+			);
+			name = RecordatoriosTests;
+			packageProductDependencies = (
+			);
+			productName = RecordatoriosTests;
+			productReference = AA000000000000000000000B /* RecordatoriosTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +130,10 @@
 				TargetAttributes = {
 					5355CCAD3054EC4C00B0101B = {
 						CreatedOnToolsVersion = 26.6;
+					};
+					AA000000000000000000000A = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 5355CCAD3054EC4C00B0101B;
 					};
 				};
 			};
@@ -100,12 +152,20 @@
 			projectRoot = "";
 			targets = (
 				5355CCAD3054EC4C00B0101B /* Recordatorios */,
+				AA000000000000000000000A /* RecordatoriosTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		5355CCAC3054EC4C00B0101B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA000000000000000000000E /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +182,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA000000000000000000000C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AA0000000000000000000013 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5355CCAD3054EC4C00B0101B /* Recordatorios */;
+			targetProxy = AA0000000000000000000014 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		5355CCB73054EC4D00B0101B /* Debug */ = {
@@ -315,6 +390,48 @@
 			};
 			name = Release;
 		};
+		AA0000000000000000000011 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = HCTUDP33Z9;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = rafaelcd8892.RecordatoriosTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Recordatorios.app/Contents/MacOS/Recordatorios";
+			};
+			name = Debug;
+		};
+		AA0000000000000000000012 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = HCTUDP33Z9;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = rafaelcd8892.RecordatoriosTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Recordatorios.app/Contents/MacOS/Recordatorios";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -332,6 +449,15 @@
 			buildConfigurations = (
 				5355CCBA3054EC4D00B0101B /* Debug */,
 				5355CCBB3054EC4D00B0101B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000010 /* Build configuration list for PBXNativeTarget "RecordatoriosTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000011 /* Debug */,
+				AA0000000000000000000012 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

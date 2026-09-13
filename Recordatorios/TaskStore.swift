@@ -11,8 +11,10 @@ final class TaskStore: ObservableObject {
     @Published var items: [TodoItem] = [] {
         didSet {
             save()
+            guard systemSyncEnabled else { return }
+
             ReminderScheduler.shared.sync(items)
-            
+
             // Sincronizar con la app Recordatorios si esta activado
             Task {
                 await RemindersSync.shared.performFullSync()
@@ -23,13 +25,37 @@ final class TaskStore: ObservableObject {
     /// Lo ultimo que se quito de la lista, para poder deshacerlo.
     @Published private var lastRemoval: [Removal] = []
 
-    private let key = "todo.items"
+    /// Ultimo fallo al leer o escribir el fichero, para avisar en el popover.
+    /// Antes un error de disco se tragaba en silencio.
+    @Published private(set) var storageError: String?
 
-    init() {
+    private let storage: TaskStorage?
+
+    /// Con esto en false el store no programa notificaciones ni habla con la
+    /// app Recordatorios. Los tests lo necesitan: si no, montar un store de
+    /// prueba cancelaria los avisos reales del usuario y dispararia una
+    /// sincronizacion contra sus recordatorios de verdad.
+    private let systemSyncEnabled: Bool
+
+    private static let legacyDefaultsKey = "todo.items"
+
+    /// El storage se inyecta para poder montar el store contra un directorio
+    /// temporal en los tests.
+    init(storage: TaskStorage? = nil, systemSyncEnabled: Bool = true) {
+        self.systemSyncEnabled = systemSyncEnabled
+        if let storage {
+            self.storage = storage
+        } else if let url = try? TaskStorage.defaultFileURL() {
+            self.storage = TaskStorage(fileURL: url)
+        } else {
+            self.storage = nil
+        }
         load()
         // Al arrancar puede haber notificaciones huerfanas de una sesion
         // anterior, o fechas que ya pasaron con el Mac apagado.
-        ReminderScheduler.shared.sync(items)
+        if systemSyncEnabled {
+            ReminderScheduler.shared.sync(items)
+        }
     }
 
     var pendingCount: Int { items.filter { !$0.isDone }.count }
@@ -47,9 +73,11 @@ final class TaskStore: ObservableObject {
         lastRemoval = [Removal(item: items[index], index: index)]
         
         // Eliminar de Recordatorios si esta sincronizado
-        let removedItem = items[index]
-        Task {
-            await RemindersSync.shared.deleteItem(removedItem)
+        if systemSyncEnabled {
+            let removedItem = items[index]
+            Task {
+                await RemindersSync.shared.deleteItem(removedItem)
+            }
         }
         
         items.remove(at: index)
@@ -63,10 +91,12 @@ final class TaskStore: ObservableObject {
         lastRemoval = removed
         
         // Eliminar de Recordatorios los que estan sincronizados
-        let removedItems = removed.map { $0.item }
-        Task {
-            for item in removedItems {
-                await RemindersSync.shared.deleteItem(item)
+        if systemSyncEnabled {
+            let removedItems = removed.map { $0.item }
+            Task {
+                for item in removedItems {
+                    await RemindersSync.shared.deleteItem(item)
+                }
             }
         }
         
@@ -86,15 +116,33 @@ final class TaskStore: ObservableObject {
     }
 
     private func save() {
-        guard let data = try? JSONEncoder().encode(items) else { return }
-        UserDefaults.standard.set(data, forKey: key)
+        guard let storage else { return }
+        do {
+            try storage.save(items)
+            storageError = nil
+        } catch {
+            storageError = "No se pudieron guardar las tareas: \(error.localizedDescription)"
+        }
     }
 
     private func load() {
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let decoded = try? JSONDecoder().decode([TodoItem].self, from: data)
-        else { return }
-        items = decoded
+        guard let storage else {
+            storageError = "No se pudo abrir la carpeta de datos de la app."
+            return
+        }
+        do {
+            try storage.migrateLegacyDefaults(
+                from: .standard,
+                key: Self.legacyDefaultsKey
+            )
+            let loaded = try storage.load()
+            // Asignar aunque venga vacio dispararia el didSet y reescribiria el
+            // fichero en cada arranque; solo interesa cuando hay algo.
+            if !loaded.isEmpty { items = loaded }
+            storageError = nil
+        } catch {
+            storageError = "No se pudieron leer las tareas: \(error.localizedDescription)"
+        }
     }
 }
 
