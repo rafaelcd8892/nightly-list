@@ -22,6 +22,11 @@ struct NightlyListApp: App {
         }
         .menuBarExtraStyle(.window)
 
+        Window("Nightly List", id: MainWindow.id) {
+            MainWindowView(store: store)
+        }
+        .defaultSize(width: 900, height: 560)
+
         Settings {
             SettingsView()
         }
