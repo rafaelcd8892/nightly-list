@@ -161,6 +161,57 @@ final class TaskStore: ObservableObject {
         DiagnosticLog.shared.log(.storage, "Archived \(removed.count) completed tasks")
     }
 
+    /// Quita del archivo las copias de una misma tarea.
+    ///
+    /// Un fallo de la sincronizacion devolvia a la lista activa lo que se
+    /// acababa de archivar, de modo que archivar otra vez creaba otra copia,
+    /// con id local nuevo pero el mismo recordatorio detras. Se conserva la
+    /// primera vez que se archivo, que es la fecha verdadera. Las que nunca se
+    /// sincronizaron no se tocan: esas solo viven aqui y su id ya es unico.
+    func repairArchive() {
+        var vistos = Set<String>()
+        var reparado: [TodoItem] = []
+
+        let porFecha = archived.sorted {
+            ($0.archivedAt ?? .distantPast) < ($1.archivedAt ?? .distantPast)
+        }
+        for item in porFecha {
+            guard let reminderID = item.reminderIdentifier else {
+                reparado.append(item)
+                continue
+            }
+            if vistos.insert(reminderID).inserted {
+                reparado.append(item)
+            }
+        }
+
+        if reparado.count != archived.count {
+            DiagnosticLog.shared.log(
+                .storage,
+                "Removed \(archived.count - reparado.count) duplicate archive entries"
+            )
+            archived = reparado
+        }
+
+        // Y lo que esta archivado no puede seguir en la lista activa. El mismo
+        // fallo las dejaba en los dos sitios, contandose dos veces. Manda el
+        // archivo: archivar fue una decision explicita del usuario.
+        let archivados = Set(archived.compactMap(\.reminderIdentifier))
+        guard !archivados.isEmpty else { return }
+
+        let antes = items.count
+        items.removeAll { item in
+            guard let reminderID = item.reminderIdentifier else { return false }
+            return archivados.contains(reminderID)
+        }
+        if items.count != antes {
+            DiagnosticLog.shared.log(
+                .storage,
+                "Removed \(antes - items.count) tasks that were already archived"
+            )
+        }
+    }
+
     /// Retira las tareas de una lista que ya existen en la app Recordatorios.
     /// No es un borrado: siguen alli y vuelven si se reactiva la lista. Las
     /// que nunca se sincronizaron se quedan, porque esas solo viven aqui.
@@ -214,6 +265,7 @@ final class TaskStore: ObservableObject {
             // fichero en cada arranque; solo interesa cuando hay algo.
             if !loaded.items.isEmpty { items = loaded.items }
             if !loaded.archived.isEmpty { archived = loaded.archived }
+            repairArchive()
             storageError = nil
             DiagnosticLog.shared.log(
                 .storage,

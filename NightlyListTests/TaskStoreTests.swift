@@ -358,4 +358,99 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(second.items[0].listIdentifier, "CAL-2")
         XCTAssertEqual(second.items[0].listTitle, "Home")
     }
+
+    // MARK: - Reparacion del archivo
+
+    private func archivedCopy(
+        _ title: String,
+        reminderID: String?,
+        archivedAt: Date
+    ) -> TodoItem {
+        var item = TodoItem(title: title)
+        item.completedAt = archivedAt
+        item.archivedAt = archivedAt
+        item.reminderIdentifier = reminderID
+        return item
+    }
+
+    /// El sync devolvia a la lista lo recien archivado, asi que archivar otra
+    /// vez dejaba otra copia con id local nuevo y el mismo recordatorio.
+    func testRepairDropsArchiveCopiesOfTheSameReminder() throws {
+        let primera = Date(timeIntervalSince1970: 1_700_000_000)
+        let storage = TaskStorage(fileURL: directory.appendingPathComponent("tasks.json"))
+        try storage.save([], archived: [
+            archivedCopy("Revisar protocolo", reminderID: "R-1", archivedAt: primera.addingTimeInterval(600)),
+            archivedCopy("Revisar protocolo", reminderID: "R-1", archivedAt: primera),
+            archivedCopy("Revisar protocolo", reminderID: "R-1", archivedAt: primera.addingTimeInterval(1200)),
+        ])
+
+        let store = TaskStore(storage: storage, systemSyncEnabled: false)
+
+        XCTAssertEqual(store.archived.count, 1)
+        XCTAssertEqual(store.archived.first?.archivedAt, primera, "se conserva la primera vez que se archivo")
+    }
+
+    func testRepairKeepsDifferentRemindersApart() throws {
+        let cuando = Date(timeIntervalSince1970: 1_700_000_000)
+        let storage = TaskStorage(fileURL: directory.appendingPathComponent("tasks.json"))
+        try storage.save([], archived: [
+            archivedCopy("Una", reminderID: "R-1", archivedAt: cuando),
+            archivedCopy("Otra", reminderID: "R-2", archivedAt: cuando),
+        ])
+
+        let store = TaskStore(storage: storage, systemSyncEnabled: false)
+
+        XCTAssertEqual(store.archived.count, 2)
+    }
+
+    /// Las que nunca se sincronizaron no tienen recordatorio con el que
+    /// compararse, y no se pueden dar por duplicadas.
+    func testRepairLeavesUnsyncedArchivedTasksAlone() throws {
+        let cuando = Date(timeIntervalSince1970: 1_700_000_000)
+        let storage = TaskStorage(fileURL: directory.appendingPathComponent("tasks.json"))
+        try storage.save([], archived: [
+            archivedCopy("Solo local", reminderID: nil, archivedAt: cuando),
+            archivedCopy("Solo local", reminderID: nil, archivedAt: cuando),
+        ])
+
+        let store = TaskStore(storage: storage, systemSyncEnabled: false)
+
+        XCTAssertEqual(store.archived.count, 2)
+    }
+
+    /// El mismo fallo dejaba la tarea archivada y ademas de vuelta en la lista
+    /// activa, contandose dos veces. Manda el archivo.
+    func testRepairDropsActiveTasksThatAreAlreadyArchived() throws {
+        let cuando = Date(timeIntervalSince1970: 1_700_000_000)
+        var activa = TodoItem(title: "Revisar protocolo")
+        activa.completedAt = cuando
+        activa.reminderIdentifier = "R-1"
+
+        var otra = TodoItem(title: "Sigue pendiente")
+        otra.reminderIdentifier = "R-2"
+
+        let storage = TaskStorage(fileURL: directory.appendingPathComponent("tasks.json"))
+        try storage.save([activa, otra], archived: [
+            archivedCopy("Revisar protocolo", reminderID: "R-1", archivedAt: cuando),
+        ])
+
+        let store = TaskStore(storage: storage, systemSyncEnabled: false)
+
+        XCTAssertEqual(store.items.map(\.title), ["Sigue pendiente"])
+        XCTAssertEqual(store.archived.count, 1)
+    }
+
+    /// Una tarea local que nunca llego a Recordatorios no se puede emparejar
+    /// con nada del archivo, y se queda.
+    func testRepairKeepsUnsyncedActiveTasks() throws {
+        let cuando = Date(timeIntervalSince1970: 1_700_000_000)
+        let storage = TaskStorage(fileURL: directory.appendingPathComponent("tasks.json"))
+        try storage.save([TodoItem(title: "Solo local")], archived: [
+            archivedCopy("Solo local", reminderID: "R-9", archivedAt: cuando),
+        ])
+
+        let store = TaskStore(storage: storage, systemSyncEnabled: false)
+
+        XCTAssertEqual(store.items.map(\.title), ["Solo local"])
+    }
 }
