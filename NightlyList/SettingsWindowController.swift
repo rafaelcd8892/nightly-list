@@ -24,14 +24,15 @@ final class SettingsWindowController: NSObject {
     }
 
     private func makeWindow() -> NSWindow {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 360),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
+        // La ventana la dimensiona el contenido: SettingsView fija su tamaño y
+        // sin esto la ventana salia mucho mas grande, con el contenido arriba y
+        // un vacio enorme debajo.
+        let hosting = NSHostingController(rootView: SettingsView())
+        hosting.sizingOptions = [.preferredContentSize]
+
+        let window = NSWindow(contentViewController: hosting)
+        window.styleMask = [.titled, .closable]
         window.title = "Nightly List Settings"
-        window.contentViewController = NSHostingController(rootView: SettingsView())
         window.setFrameAutosaveName("NightlyListSettingsWindow")
         window.isReleasedWhenClosed = false
         window.center()

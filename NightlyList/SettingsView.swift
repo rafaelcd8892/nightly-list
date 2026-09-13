@@ -1,25 +1,59 @@
 import SwiftUI
 
-/// La ventana de Ajustes (⌘,).
+/// La ventana de Ajustes.
 ///
 /// Aqui viven las opciones que antes colgaban del popover. El popover es la
 /// vista rapida; todo lo que se toca una vez y se olvida va aqui.
+///
+/// El selector es un Picker y no un TabView a proposito: dentro de una ventana
+/// propia, un TabView se lleva las pestañas a la barra de titulo y las colapsa
+/// en un boton de desbordamiento. Eso solo sale bien dentro de la escena
+/// Settings de SwiftUI, que es justo la que no podiamos usar.
 struct SettingsView: View {
-    var body: some View {
-        TabView {
-            GeneralSettingsTab()
-                .tabItem { Label("General", systemImage: "gearshape") }
+    @State private var section: Section = .general
 
-            SyncSettingsTab()
-                .tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
+    enum Section: String, CaseIterable, Identifiable {
+        case general = "General"
+        case sync = "Sync"
+        case summary = "Summary"
+        case diagnostics = "Diagnostics"
 
-            SummarySettingsTab()
-                .tabItem { Label("Summary", systemImage: "text.quote") }
+        var id: String { rawValue }
 
-            DiagnosticSettingsTab()
-                .tabItem { Label("Diagnostics", systemImage: "stethoscope") }
+        var symbol: String {
+            switch self {
+            case .general: return "gearshape"
+            case .sync: return "arrow.triangle.2.circlepath"
+            case .summary: return "text.quote"
+            case .diagnostics: return "stethoscope"
+            }
         }
-        .frame(width: 480, height: 360)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("", selection: $section) {
+                ForEach(Section.allCases) { section in
+                    Label(section.rawValue, systemImage: section.symbol).tag(section)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(12)
+
+            Divider()
+
+            Group {
+                switch section {
+                case .general: GeneralSettingsTab()
+                case .sync: SyncSettingsTab()
+                case .summary: SummarySettingsTab()
+                case .diagnostics: DiagnosticSettingsTab()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: 520, height: 420)
     }
 }
 
