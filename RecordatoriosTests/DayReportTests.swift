@@ -112,7 +112,18 @@ final class DayReportTests: XCTestCase {
         XCTAssertTrue(markdown.contains("- [x] Cerrada"))
         XCTAssertTrue(markdown.contains("- [ ] Abierta"))
         XCTAssertTrue(markdown.contains("## Hecho (1)"))
-        XCTAssertTrue(markdown.contains(DayReport.summaryPrompt))
+        XCTAssertTrue(markdown.contains(SummaryPrompt.defaultText))
+    }
+
+    /// El prompt es editable, asi que el export tiene que llevar el que le
+    /// pasen y no uno fijo.
+    func testMarkdownCarriesTheGivenPrompt() {
+        let report = DayReport(day: today, items: [task("Algo")], calendar: calendar)
+
+        let markdown = report.markdown(prompt: "Dime solo cuantas quedaron a medias.")
+
+        XCTAssertTrue(markdown.contains("Dime solo cuantas quedaron a medias."))
+        XCTAssertFalse(markdown.contains(SummaryPrompt.defaultText))
     }
 
     func testMarkdownSaysSoWhenNothingWasCompleted() {

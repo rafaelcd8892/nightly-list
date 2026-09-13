@@ -95,6 +95,25 @@ final class TaskStore: ObservableObject {
         items.append(item)
     }
 
+    /// Marca o desmarca por id, este la tarea en la lista activa o ya en el
+    /// archivo. Desmarcar una archivada la devuelve a la lista: si no esta
+    /// hecha, no tiene nada que hacer en el archivo.
+    func toggleCompletion(id: TodoItem.ID) {
+        if let index = items.firstIndex(where: { $0.id == id }) {
+            items[index].isDone.toggle()
+            items[index].lastModified = Date()
+            return
+        }
+
+        guard let index = archived.firstIndex(where: { $0.id == id }) else { return }
+        var item = archived[index]
+        item.isDone = false
+        item.archivedAt = nil
+        item.lastModified = Date()
+        archived.remove(at: index)
+        items.append(item)
+    }
+
     func remove(_ item: TodoItem) {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
         // La x es un borrado intencionado, no limpieza: esa si desaparece.

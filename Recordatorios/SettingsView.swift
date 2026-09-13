@@ -13,6 +13,9 @@ struct SettingsView: View {
             SyncSettingsTab()
                 .tabItem { Label("Sincronización", systemImage: "arrow.triangle.2.circlepath") }
 
+            SummarySettingsTab()
+                .tabItem { Label("Resumen", systemImage: "text.quote") }
+
             DiagnosticSettingsTab()
                 .tabItem { Label("Diagnóstico", systemImage: "stethoscope") }
         }
@@ -113,6 +116,51 @@ private struct SyncSettingsTab: View {
                 : "Sincronizacion rechazada: sin permiso de Recordatorios")
             if granted { await sync.performFullSync() }
         }
+    }
+}
+
+// MARK: - Resumen del dia
+
+private struct SummarySettingsTab: View {
+    @State private var draft = SummaryPrompt.current
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Este texto se pega al final del día exportado, para pasárselo a un modelo sin tener que escribirlo cada vez.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            TextEditor(text: $draft)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 160)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(.quaternary)
+                )
+
+            HStack {
+                Button("Restablecer") {
+                    SummaryPrompt.reset()
+                    draft = SummaryPrompt.defaultText
+                }
+                .disabled(draft == SummaryPrompt.defaultText)
+
+                Spacer()
+
+                Text(saved ? "Guardado" : "Sin guardar")
+                    .font(.caption)
+                    .foregroundStyle(saved ? Color.secondary : Color.orange)
+
+                Button("Guardar") { SummaryPrompt.save(draft) }
+                    .keyboardShortcut("s")
+                    .disabled(saved)
+            }
+        }
+        .padding(16)
+    }
+
+    private var saved: Bool {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines) == SummaryPrompt.current
     }
 }
 

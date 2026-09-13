@@ -45,7 +45,7 @@ struct DayReport {
 
     /// El dia en Markdown, con el prompt de resumen pegado al final para
     /// poder pasarselo a un modelo sin tener que escribirlo cada vez.
-    func markdown() -> String {
+    func markdown(prompt: String = SummaryPrompt.current) -> String {
         var lines = ["# Recordatorios — \(Self.dayFormatter.string(from: day))", ""]
 
         if completed.isEmpty {
@@ -65,18 +65,9 @@ struct DayReport {
             lines.append("")
         }
 
-        lines += ["---", "", Self.summaryPrompt]
+        lines += ["---", "", prompt]
         return lines.joined(separator: "\n")
     }
-
-    /// Va en el propio export para que copiar y pegar baste.
-    static let summaryPrompt = """
-        Resume mi jornada a partir de la lista de arriba, en español y en \
-        tercera persona del plural o impersonal. Tres o cuatro frases, sin \
-        vinetas. Agrupa por tema en vez de repetir la lista, di que quedo a \
-        medias, y no inventes nada que no este ahi. Si la lista esta vacia, \
-        dilo y no rellenes.
-        """
 
     private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()

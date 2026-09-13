@@ -262,4 +262,51 @@ final class TaskStoreTests: XCTestCase {
 
         XCTAssertEqual(report.completed.map(\.title), ["Del tirón"])
     }
+
+    // MARK: - Marcar desde la vista Hoy
+
+    func testToggleCompletionMarksAnActiveTask() {
+        let store = makeStore()
+        store.add("A")
+
+        store.toggleCompletion(id: store.items[0].id)
+
+        XCTAssertTrue(store.items[0].isDone)
+    }
+
+    func testToggleCompletionUnmarksAnActiveTask() {
+        let store = makeStore()
+        store.addCompleted("A")
+
+        store.toggleCompletion(id: store.items[0].id)
+
+        XCTAssertFalse(store.items[0].isDone)
+        XCTAssertNil(store.items[0].completedAt)
+    }
+
+    /// Desmarcar una archivada la devuelve a la lista: si no esta hecha, no
+    /// tiene nada que hacer en el archivo.
+    func testUnmarkingAnArchivedTaskBringsItBackToTheList() {
+        let store = makeStore()
+        store.addCompleted("Archivada")
+        store.clearDone()
+        let id = try! XCTUnwrap(store.archived.first).id
+
+        store.toggleCompletion(id: id)
+
+        XCTAssertEqual(store.items.map(\.title), ["Archivada"])
+        XCTAssertTrue(store.archived.isEmpty)
+        XCTAssertNil(store.items[0].archivedAt)
+        XCTAssertFalse(store.items[0].isDone)
+    }
+
+    func testToggleCompletionIgnoresAnUnknownID() {
+        let store = makeStore()
+        store.add("A")
+
+        store.toggleCompletion(id: UUID())
+
+        XCTAssertFalse(store.items[0].isDone)
+        XCTAssertEqual(store.items.count, 1)
+    }
 }

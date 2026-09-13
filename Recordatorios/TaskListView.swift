@@ -38,7 +38,10 @@ struct TaskListView: View {
             case .pending:
                 pendingList
             case .today:
-                DayReportView(report: DayReport(items: store.items, archived: store.archived))
+                DayReportView(
+                    report: DayReport(items: store.items, archived: store.archived),
+                    onToggle: store.toggleCompletion(id:)
+                )
             }
 
             if notificationsDenied {
@@ -321,11 +324,9 @@ private func suggestedDueDate() -> Date {
 }
 
 /// El dia de un vistazo, y el boton que lo saca en Markdown.
-///
-/// Es de solo lectura a proposito: es un registro de lo que paso, no una
-/// lista con la que trastear.
 private struct DayReportView: View {
     let report: DayReport
+    let onToggle: (TodoItem.ID) -> Void
     @State private var copied = false
 
     var body: some View {
@@ -341,7 +342,7 @@ private struct DayReportView: View {
                         if !report.completed.isEmpty {
                             section("Hecho", count: report.completed.count) {
                                 ForEach(report.completed) { item in
-                                    row(item.title, time: item.completedAt, done: true)
+                                    row(item, time: item.completedAt, done: true)
                                 }
                             }
                         }
@@ -349,7 +350,7 @@ private struct DayReportView: View {
                         if !report.created.isEmpty {
                             section("Apuntado", count: report.created.count) {
                                 ForEach(report.created) { item in
-                                    row(item.title, time: nil, done: false)
+                                    row(item, time: nil, done: false)
                                 }
                             }
                         }
@@ -390,13 +391,19 @@ private struct DayReportView: View {
         }
     }
 
-    private func row(_ title: String, time: Date?, done: Bool) -> some View {
+    private func row(_ item: TodoItem, time: Date?, done: Bool) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(done ? Color.green : Color.secondary)
-                .font(.caption)
+            Button {
+                onToggle(item.id)
+            } label: {
+                Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(done ? Color.green : Color.secondary)
+                    .font(.caption)
+            }
+            .buttonStyle(.plain)
+            .help(done ? "Marcar como pendiente" : "Marcar como hecha")
 
-            Text(title)
+            Text(item.title)
                 .strikethrough(done)
                 .foregroundStyle(done ? Color.secondary : Color.primary)
 
