@@ -73,7 +73,7 @@ final class RemindersSync: ObservableObject {
                         Task { @MainActor in
                             self.authorizationStatus = granted ? .fullAccess : .denied
                             if let error = error {
-                                self.lastSyncError = "Error al solicitar permisos: \(error.localizedDescription)"
+                                self.lastSyncError = "Permission request failed: \(error.localizedDescription)"
                             }
                             continuation.resume(returning: granted)
                         }
@@ -83,7 +83,7 @@ final class RemindersSync: ObservableObject {
         } catch {
             await MainActor.run {
                 self.authorizationStatus = .denied
-                self.lastSyncError = "Error al solicitar permisos: \(error.localizedDescription)"
+                self.lastSyncError = "Permission request failed: \(error.localizedDescription)"
             }
             return false
         }
@@ -102,7 +102,7 @@ final class RemindersSync: ObservableObject {
             return await requestAuthorization()
         }
         
-        lastSyncError = "Permisos denegados. Actívalos en Ajustes del Sistema."
+        lastSyncError = "Permission denied. Enable it in System Settings."
         return false
     }
     
@@ -155,15 +155,15 @@ final class RemindersSync: ObservableObject {
             // 6. Actualizar estado
             DiagnosticLog.shared.log(
                 .sync,
-                "Sincronizadas \(TaskStore.shared.items.count) tareas con \(reminders.count) recordatorios"
+                "Synced \(TaskStore.shared.items.count) tasks against \(reminders.count) reminders"
             )
             lastSyncError = nil
             lastSyncDate = Date()
             UserDefaults.standard.set(lastSyncDate, forKey: lastSyncKey)
             
         } catch {
-            lastSyncError = "Error en sincronización: \(error.localizedDescription)"
-            DiagnosticLog.shared.log(.sync, "Fallo: \(error.localizedDescription)")
+            lastSyncError = "Sync failed: \(error.localizedDescription)"
+            DiagnosticLog.shared.log(.sync, "Failed: \(error.localizedDescription)")
         }
     }
     
@@ -272,7 +272,7 @@ final class RemindersSync: ObservableObject {
         guard merged.count != TaskStore.shared.items.count else { return }
         DiagnosticLog.shared.log(
             .sync,
-            "Fundidos \(TaskStore.shared.items.count - merged.count) duplicados por titulo"
+            "Merged \(TaskStore.shared.items.count - merged.count) duplicates by title"
         )
         TaskStore.shared.items = merged
     }
@@ -356,7 +356,7 @@ final class RemindersSync: ObservableObject {
     
     /// Crea una tarea local desde un recordatorio de la app Recordatorios.
     private func createLocalItem(from reminder: EKReminder) {
-        var item = TodoItem(title: reminder.title ?? "Sin título")
+        var item = TodoItem(title: reminder.title ?? "Untitled")
 
         // Las fechas reales de Recordatorios, no aproximaciones: son lo que
         // alimenta el registro del dia.
@@ -435,7 +435,7 @@ final class RemindersSync: ObservableObject {
         eventStore.defaultCalendarForNewReminders() ?? {
             // Crear calendario si no existe
             let calendar = EKCalendar(for: .reminder, eventStore: eventStore)
-            calendar.title = "Recordatorios"
+            calendar.title = "Tasks"
             calendar.source = eventStore.sources.first { $0.sourceType == .local } ?? eventStore.sources.first!
             try? eventStore.saveCalendar(calendar, commit: true)
             return calendar
@@ -476,7 +476,7 @@ final class RemindersSync: ObservableObject {
                 updateLocalItem(item, withReminderID: reminderID)
             }
         } catch {
-            lastSyncError = "Error al sincronizar tarea: \(error.localizedDescription)"
+            lastSyncError = "Could not sync task: \(error.localizedDescription)"
         }
     }
     
@@ -489,7 +489,7 @@ final class RemindersSync: ObservableObject {
             do {
                 try deleteReminder(withID: reminderID)
             } catch {
-                lastSyncError = "Error al eliminar recordatorio: \(error.localizedDescription)"
+                lastSyncError = "Could not delete reminder: \(error.localizedDescription)"
             }
         }
     }
@@ -504,9 +504,9 @@ enum SyncError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unauthorized:
-            return "No hay permisos para acceder a Recordatorios"
+            return "No permission to access Reminders"
         case .reminderNotFound:
-            return "Recordatorio no encontrado"
+            return "Reminder not found"
         }
     }
 }

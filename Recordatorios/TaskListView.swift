@@ -12,8 +12,8 @@ struct TaskListView: View {
     private let maxVisibleRows = 8
 
     enum Mode: String, CaseIterable, Identifiable {
-        case pending = "Pendientes"
-        case today = "Hoy"
+        case pending = "Open"
+        case today = "Today"
 
         var id: String { rawValue }
     }
@@ -21,10 +21,10 @@ struct TaskListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                TextField("Nueva tarea…", text: $newTitle)
+                TextField("New task…", text: $newTitle)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(add)
-                Button("Añadir", action: add)
+                Button("Add", action: add)
                     .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
             }
 
@@ -45,7 +45,7 @@ struct TaskListView: View {
             }
 
             if notificationsDenied {
-                Text("Las notificaciones estan desactivadas para Recordatorios en Ajustes del Sistema.")
+                Text("Notifications are turned off for this app in System Settings.")
                     .font(.caption2)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
@@ -61,30 +61,30 @@ struct TaskListView: View {
             Divider()
 
             HStack {
-                Text("\(store.pendingCount) pendientes")
+                Text("\(store.pendingCount) open")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
                 if store.canUndo {
-                    Button("Deshacer") { store.undoRemoval() }
+                    Button("Undo") { store.undoRemoval() }
                         .font(.caption)
                         .keyboardShortcut("z")
                 }
-                Button("Limpiar hechas") { store.clearDone() }
+                Button("Archive done") { store.clearDone() }
                     .font(.caption)
                 SettingsLink {
                     Image(systemName: "gearshape")
                 }
                 .buttonStyle(.plain)
                 .font(.caption)
-                .help("Ajustes")
+                .help("Settings")
                 // Una app LSUIElement no se pone delante sola: sin esto la
                 // ventana de Ajustes se abre detras de todo.
                 .simultaneousGesture(TapGesture().onEnded {
                     NSApp.activate(ignoringOtherApps: true)
                 })
 
-                Button("Salir") { NSApplication.shared.terminate(nil) }
+                Button("Quit") { NSApplication.shared.terminate(nil) }
                     .font(.caption)
                     .keyboardShortcut("q")
             }
@@ -99,7 +99,7 @@ struct TaskListView: View {
     @ViewBuilder
     private var pendingList: some View {
         if store.items.isEmpty {
-            Text("Sin tareas")
+            Text("No tasks")
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 12)
@@ -200,13 +200,13 @@ private struct TaskRow: View {
                                 .strikethrough(item.isDone)
                                 .foregroundStyle(item.isDone ? Color.secondary : Color.primary)
                                 .onTapGesture(count: 2) { startEditingTitle() }
-                                .help("Doble clic para renombrar")
+                                .help("Double-click to rename")
                             
                             if item.isSyncedWithReminders {
                                 Image(systemName: "checkmark.circle.badge.questionmark.fill")
                                     .font(.caption2)
                                     .foregroundStyle(.blue)
-                                    .help("Sincronizado con Recordatorios")
+                                    .help("Synced with Apple Reminders")
                             }
                         }
                     }
@@ -225,7 +225,7 @@ private struct TaskRow: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(item.dueDate == nil ? Color.secondary : Color.accentColor)
-                .help(item.dueDate == nil ? "Poner recordatorio" : "Cambiar recordatorio")
+                .help(item.dueDate == nil ? "Set reminder" : "Change reminder")
 
                 Button(action: onDelete) {
                     Image(systemName: "xmark")
@@ -240,7 +240,7 @@ private struct TaskRow: View {
                         .datePickerStyle(.compact)
                         .labelsHidden()
 
-                    Button("Quitar") { 
+                    Button("Clear") { 
                         item.dueDate = nil 
                         item.lastModified = Date()
                     }
@@ -250,21 +250,21 @@ private struct TaskRow: View {
             }
         }
         .contextMenu {
-            Button("Renombrar") { startEditingTitle() }
+            Button("Rename") { startEditingTitle() }
 
-            Button(item.isDone ? "Marcar como pendiente" : "Marcar como hecha") {
+            Button(item.isDone ? "Mark as open" : "Mark as done") {
                 item.isDone.toggle()
                 item.lastModified = Date()
             }
 
             Divider()
 
-            Button(item.dueDate == nil ? "Poner recordatorio…" : "Cambiar recordatorio…") {
+            Button(item.dueDate == nil ? "Add reminder…" : "Change reminder…") {
                 onToggleDateEditor()
             }
 
             if item.dueDate != nil {
-                Button("Quitar recordatorio") {
+                Button("Remove reminder") {
                     item.dueDate = nil
                     item.lastModified = Date()
                 }
@@ -272,12 +272,12 @@ private struct TaskRow: View {
 
             Divider()
 
-            Button("Copiar título") {
+            Button("Copy title") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(item.title, forType: .string)
             }
 
-            Button("Borrar", role: .destructive, action: onDelete)
+            Button("Delete", role: .destructive, action: onDelete)
         }
     }
 
@@ -332,7 +332,7 @@ private struct DayReportView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if report.isEmpty {
-                Text("Hoy todavía no hay nada.")
+                Text("Nothing yet today.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 12)
@@ -340,7 +340,7 @@ private struct DayReportView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
                         if !report.completed.isEmpty {
-                            section("Hecho", count: report.completed.count) {
+                            section("Done", count: report.completed.count) {
                                 ForEach(report.completed) { item in
                                     row(item, time: item.completedAt, done: true)
                                 }
@@ -348,7 +348,7 @@ private struct DayReportView: View {
                         }
 
                         if !report.created.isEmpty {
-                            section("Apuntado", count: report.created.count) {
+                            section("Added", count: report.created.count) {
                                 ForEach(report.created) { item in
                                     row(item, time: nil, done: false)
                                 }
@@ -365,7 +365,7 @@ private struct DayReportView: View {
                 copied = true
             } label: {
                 Label(
-                    copied ? "Copiado" : "Copiar el día en Markdown",
+                    copied ? "Copied" : "Copy day as Markdown",
                     systemImage: copied ? "checkmark" : "doc.on.clipboard"
                 )
                 .font(.caption)
@@ -401,7 +401,7 @@ private struct DayReportView: View {
                     .font(.caption)
             }
             .buttonStyle(.plain)
-            .help(done ? "Marcar como pendiente" : "Marcar como hecha")
+            .help(done ? "Mark as open" : "Mark as done")
 
             Text(item.title)
                 .strikethrough(done)

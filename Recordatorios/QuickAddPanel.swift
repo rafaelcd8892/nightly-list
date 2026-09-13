@@ -80,13 +80,13 @@ private struct QuickAddView: View {
                 .font(.system(size: 20))
                 .foregroundStyle(.secondary)
 
-            TextField("Nueva tarea…", text: $title)
+            TextField("New task…", text: $title)
                 .textFieldStyle(.plain)
                 .font(.system(size: 20))
                 .focused($focused)
                 .onSubmit { save(alreadyDone: false) }
 
-            Text("⌘⏎ hecha")
+            Text("⌘⏎ done")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
 

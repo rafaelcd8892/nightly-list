@@ -150,7 +150,7 @@ final class TaskStore: ObservableObject {
         archived.append(contentsOf: removed.map(\.item))
         items.removeAll { $0.isDone }
 
-        DiagnosticLog.shared.log(.storage, "Archivadas \(removed.count) tareas hechas")
+        DiagnosticLog.shared.log(.storage, "Archived \(removed.count) completed tasks")
     }
 
     /// Reinserta lo ultimo que se quito, en su posicion original. Vale tanto
@@ -178,21 +178,21 @@ final class TaskStore: ObservableObject {
             try storage.save(items, archived: archived)
             storageError = nil
         } catch {
-            storageError = "No se pudieron guardar las tareas: \(error.localizedDescription)"
-            DiagnosticLog.shared.log(.storage, "Fallo al guardar: \(error.localizedDescription)")
+            storageError = "Could not save tasks: \(error.localizedDescription)"
+            DiagnosticLog.shared.log(.storage, "Save failed: \(error.localizedDescription)")
         }
     }
 
     private func load() {
         guard let storage else {
             if !Self.isRunningTests {
-                storageError = "No se pudo abrir la carpeta de datos de la app."
+                storageError = "Could not open the app's data folder."
             }
             return
         }
         do {
             if try storage.migrateLegacyDefaults(from: .standard, key: Self.legacyDefaultsKey) {
-                DiagnosticLog.shared.log(.storage, "Migradas las tareas de UserDefaults al fichero")
+                DiagnosticLog.shared.log(.storage, "Migrated tasks from UserDefaults into the file")
             }
             let loaded = try storage.load()
             // Asignar aunque venga vacio dispararia el didSet y reescribiria el
@@ -202,11 +202,11 @@ final class TaskStore: ObservableObject {
             storageError = nil
             DiagnosticLog.shared.log(
                 .storage,
-                "Cargadas \(loaded.items.count) tareas y \(loaded.archived.count) archivadas"
+                "Loaded \(loaded.items.count) tasks and \(loaded.archived.count) archived"
             )
         } catch {
-            storageError = "No se pudieron leer las tareas: \(error.localizedDescription)"
-            DiagnosticLog.shared.log(.storage, "Fallo al leer: \(error.localizedDescription)")
+            storageError = "Could not read tasks: \(error.localizedDescription)"
+            DiagnosticLog.shared.log(.storage, "Read failed: \(error.localizedDescription)")
         }
     }
 }

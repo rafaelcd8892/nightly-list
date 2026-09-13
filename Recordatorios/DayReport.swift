@@ -46,12 +46,12 @@ struct DayReport {
     /// El dia en Markdown, con el prompt de resumen pegado al final para
     /// poder pasarselo a un modelo sin tener que escribirlo cada vez.
     func markdown(prompt: String = SummaryPrompt.current) -> String {
-        var lines = ["# Recordatorios — \(Self.dayFormatter.string(from: day))", ""]
+        var lines = ["# \(Self.dayFormatter.string(from: day))", ""]
 
         if completed.isEmpty {
-            lines += ["## Hecho", "", "_Nada completado._", ""]
+            lines += ["## Done", "", "_Nothing completed._", ""]
         } else {
-            lines += ["## Hecho (\(completed.count))", ""]
+            lines += ["## Done (\(completed.count))", ""]
             lines += completed.map { item in
                 let hour = item.completedAt.map { " — \(Self.timeFormatter.string(from: $0))" } ?? ""
                 return "- [x] \(item.title)\(hour)"
@@ -60,7 +60,7 @@ struct DayReport {
         }
 
         if !created.isEmpty {
-            lines += ["## Apuntado y sin cerrar (\(created.count))", ""]
+            lines += ["## Still open (\(created.count))", ""]
             lines += created.map { "- [ ] \($0.title)" }
             lines.append("")
         }
@@ -69,8 +69,14 @@ struct DayReport {
         return lines.joined(separator: "\n")
     }
 
+    /// Locale fijo en ingles: el export es siempre en ingles, asi que no
+    /// tiene que salir mezclado segun el idioma del Mac. Era justo lo que
+    /// pasaba antes, con la cabecera en ingles y las secciones en espanol.
+    private static let exportLocale = Locale(identifier: "en_US")
+
     private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
+        formatter.locale = exportLocale
         formatter.dateStyle = .long
         formatter.timeStyle = .none
         return formatter
@@ -78,6 +84,7 @@ struct DayReport {
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
+        formatter.locale = exportLocale
         formatter.dateStyle = .none
         formatter.timeStyle = .short
         return formatter

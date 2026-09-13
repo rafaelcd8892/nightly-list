@@ -111,7 +111,7 @@ final class DayReportTests: XCTestCase {
 
         XCTAssertTrue(markdown.contains("- [x] Cerrada"))
         XCTAssertTrue(markdown.contains("- [ ] Abierta"))
-        XCTAssertTrue(markdown.contains("## Hecho (1)"))
+        XCTAssertTrue(markdown.contains("## Done (1)"))
         XCTAssertTrue(markdown.contains(SummaryPrompt.defaultText))
     }
 
@@ -131,7 +131,20 @@ final class DayReportTests: XCTestCase {
 
         let markdown = report.markdown()
 
-        XCTAssertTrue(markdown.contains("_Nada completado._"))
-        XCTAssertFalse(markdown.contains("Apuntado y sin cerrar"))
+        XCTAssertTrue(markdown.contains("_Nothing completed._"))
+        XCTAssertFalse(markdown.contains("Still open"))
+    }
+}
+
+extension DayReportTests {
+    /// El export va siempre en ingles, con locale fijo, para que no salga
+    /// mezclado segun el idioma del Mac.
+    func testMarkdownHeaderIsAlwaysEnglish() {
+        let report = DayReport(day: today, items: [task("Algo")], calendar: calendar)
+
+        XCTAssertTrue(
+            report.markdown().hasPrefix("# January 15, 2027"),
+            "cabecera inesperada: \(report.markdown().prefix(40))"
+        )
     }
 }

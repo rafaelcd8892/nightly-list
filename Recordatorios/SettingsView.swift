@@ -11,13 +11,13 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
 
             SyncSettingsTab()
-                .tabItem { Label("Sincronización", systemImage: "arrow.triangle.2.circlepath") }
+                .tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
 
             SummarySettingsTab()
-                .tabItem { Label("Resumen", systemImage: "text.quote") }
+                .tabItem { Label("Summary", systemImage: "text.quote") }
 
             DiagnosticSettingsTab()
-                .tabItem { Label("Diagnóstico", systemImage: "stethoscope") }
+                .tabItem { Label("Diagnostics", systemImage: "stethoscope") }
         }
         .frame(width: 480, height: 360)
     }
@@ -32,7 +32,7 @@ private struct GeneralSettingsTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Abrir Recordatorios al iniciar sesión", isOn: Binding(
+                Toggle("Open at login", isOn: Binding(
                     get: { loginItem.isEnabled },
                     set: { loginError = loginItem.setEnabled($0) }
                 ))
@@ -43,13 +43,13 @@ private struct GeneralSettingsTab: View {
                         .foregroundStyle(.red)
                 }
             } footer: {
-                Text("También puedes cambiarlo en Ajustes del Sistema › General › Ítems de inicio.")
+                Text("You can also change this in System Settings › General › Login Items.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Atajo") {
-                LabeledContent("Captura rápida", value: "⌥ Espacio")
+            Section("Shortcut") {
+                LabeledContent("Quick capture", value: "⌥ Space")
             }
         }
         .formStyle(.grouped)
@@ -65,27 +65,27 @@ private struct SyncSettingsTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Sincronizar con la app Recordatorios", isOn: Binding(
+                Toggle("Sync with Apple Reminders", isOn: Binding(
                     get: { sync.isSyncEnabled },
                     set: setEnabled
                 ))
             } footer: {
-                Text("Tus tareas se guardan como recordatorios de Apple, así que llegan al iPhone y al iPad por iCloud.")
+                Text("Your tasks are stored as Apple reminders, so they reach your iPhone and iPad through iCloud.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             if sync.isSyncEnabled {
-                Section("Estado") {
-                    LabeledContent("Última sincronización") {
+                Section("Status") {
+                    LabeledContent("Last sync") {
                         if let lastSync = sync.lastSyncDate {
                             Text(lastSync, style: .relative)
                         } else {
-                            Text("nunca").foregroundStyle(.secondary)
+                            Text("never").foregroundStyle(.secondary)
                         }
                     }
 
-                    Button("Sincronizar ahora") {
+                    Button("Sync now") {
                         Task { await sync.performFullSync() }
                     }
                 }
@@ -105,15 +105,15 @@ private struct SyncSettingsTab: View {
     private func setEnabled(_ enabled: Bool) {
         guard enabled else {
             sync.isSyncEnabled = false
-            DiagnosticLog.shared.log(.sync, "Sincronizacion desactivada")
+            DiagnosticLog.shared.log(.sync, "Sync turned off")
             return
         }
         Task {
             let granted = await sync.requestAuthorization()
             sync.isSyncEnabled = granted
             DiagnosticLog.shared.log(.sync, granted
-                ? "Sincronizacion activada"
-                : "Sincronizacion rechazada: sin permiso de Recordatorios")
+                ? "Sync turned on"
+                : "Sync refused: no Reminders permission")
             if granted { await sync.performFullSync() }
         }
     }
@@ -126,7 +126,7 @@ private struct SummarySettingsTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Este texto se pega al final del día exportado, para pasárselo a un modelo sin tener que escribirlo cada vez.")
+            Text("This text is appended to the exported day, so you can hand it to a model without retyping it every time.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -139,7 +139,7 @@ private struct SummarySettingsTab: View {
                 )
 
             HStack {
-                Button("Restablecer") {
+                Button("Reset") {
                     SummaryPrompt.reset()
                     draft = SummaryPrompt.defaultText
                 }
@@ -147,11 +147,11 @@ private struct SummarySettingsTab: View {
 
                 Spacer()
 
-                Text(saved ? "Guardado" : "Sin guardar")
+                Text(saved ? "Saved" : "Unsaved")
                     .font(.caption)
                     .foregroundStyle(saved ? Color.secondary : Color.orange)
 
-                Button("Guardar") { SummaryPrompt.save(draft) }
+                Button("Save") { SummaryPrompt.save(draft) }
                     .keyboardShortcut("s")
                     .disabled(saved)
             }
@@ -172,12 +172,12 @@ private struct DiagnosticSettingsTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Registro de lo que hace la app. Útil para entender un fallo de sincronización o de guardado.")
+            Text("A record of what the app does. Useful for tracking down a sync or save failure.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             ScrollView {
-                Text(contents.isEmpty ? "El registro está vacío." : contents)
+                Text(contents.isEmpty ? "The log is empty." : contents)
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -186,13 +186,13 @@ private struct DiagnosticSettingsTab: View {
             .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
 
             HStack {
-                Button("Copiar") {
+                Button("Copy") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(contents, forType: .string)
                 }
                 .disabled(contents.isEmpty)
 
-                Button("Mostrar en el Finder") {
+                Button("Show in Finder") {
                     guard let fileURL = log.fileURL else { return }
                     NSWorkspace.shared.activateFileViewerSelecting([fileURL])
                 }
@@ -200,7 +200,7 @@ private struct DiagnosticSettingsTab: View {
 
                 Spacer()
 
-                Button("Vaciar", role: .destructive) {
+                Button("Clear", role: .destructive) {
                     log.clear()
                 }
                 .disabled(contents.isEmpty)

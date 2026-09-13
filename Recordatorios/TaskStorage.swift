@@ -34,8 +34,8 @@ enum StorageError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .futureVersion(found, supported):
-            return "El fichero de tareas es de la version \(found) y esta app entiende hasta la \(supported). "
-                + "Actualiza la app para no perder datos."
+            return "This task file is version \(found) and this app understands up to \(supported). "
+                + "Update the app so you do not lose data."
         }
     }
 }
@@ -150,7 +150,7 @@ struct TaskStorage {
             let text = try decoder.singleValueContainer().decode(String.self)
             guard let date = parseDate(text) else {
                 throw DecodingError.dataCorrupted(
-                    .init(codingPath: decoder.codingPath, debugDescription: "Fecha ilegible: \(text)")
+                    .init(codingPath: decoder.codingPath, debugDescription: "Unreadable date: \(text)")
                 )
             }
             return date

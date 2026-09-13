@@ -57,7 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
-        DiagnosticLog.shared.log(.app, "Arranque")
+        DiagnosticLog.shared.log(.app, "Launched")
 
         // Option+Espacio abre la captura rapida.
         HotKeyCenter.shared.register(

@@ -25,11 +25,11 @@ final class LoginItem: ObservableObject {
                 try SMAppService.mainApp.unregister()
             }
             DiagnosticLog.shared.log(.login, enabled
-                ? "Registrado para abrir al iniciar sesion"
-                : "Ya no abre al iniciar sesion")
+                ? "Registered to open at login"
+                : "No longer opens at login")
             return nil
         } catch {
-            DiagnosticLog.shared.log(.login, "Fallo al cambiarlo: \(error.localizedDescription)")
+            DiagnosticLog.shared.log(.login, "Could not change it: \(error.localizedDescription)")
             return error.localizedDescription
         }
     }

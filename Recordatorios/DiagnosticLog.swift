@@ -14,10 +14,10 @@ final class DiagnosticLog: ObservableObject {
 
     enum Category: String {
         case app = "app"
-        case storage = "disco"
-        case notifications = "avisos"
+        case storage = "storage"
+        case notifications = "notifications"
         case sync = "sync"
-        case login = "inicio"
+        case login = "login"
     }
 
     /// Cuando el fichero pasa de aqui se recorta por la cabeza. Sin tope, un
@@ -78,7 +78,7 @@ final class DiagnosticLog: ObservableObject {
         } catch {
             // Si el fichero no se deja escribir, al menos queda en el log del
             // sistema. No tiene sentido avisar al usuario de que fallo el log.
-            logger.error("No se pudo escribir el log: \(error.localizedDescription, privacy: .public)")
+            logger.error("Could not write the log: \(error.localizedDescription, privacy: .public)")
         }
     }
 

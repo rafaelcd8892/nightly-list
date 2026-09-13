@@ -40,14 +40,14 @@ final class ReminderScheduler {
         let stale = pending.map(\.identifier).filter { !wantedIDs.contains($0) }
         if !stale.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: stale)
-            DiagnosticLog.shared.log(.notifications, "Retirados \(stale.count) avisos que ya no tocan")
+            DiagnosticLog.shared.log(.notifications, "Removed \(stale.count) stale notifications")
         }
 
         for item in wanted {
             guard let dueDate = item.dueDate else { continue }
 
             let content = UNMutableNotificationContent()
-            content.title = "Recordatorio"
+            content.title = "Reminder"
             content.body = item.title
             content.sound = .default
 
@@ -66,7 +66,7 @@ final class ReminderScheduler {
             } catch {
                 DiagnosticLog.shared.log(
                     .notifications,
-                    "No se pudo programar \"\(item.title)\": \(error.localizedDescription)"
+                    "Could not schedule \"\(item.title)\": \(error.localizedDescription)"
                 )
             }
         }
