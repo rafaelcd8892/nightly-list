@@ -77,21 +77,29 @@ final class TaskStore: ObservableObject {
     var canUndo: Bool { !lastRemoval.isEmpty }
 
     func add(_ title: String) {
-        append(title, completedAt: nil)
+        append(title, completedAt: nil, list: nil)
+    }
+
+    /// Alta directamente en una lista. La usa el popover cuando hay un filtro
+    /// puesto: si estas mirando "Work", lo que escribes va a Work.
+    func add(_ title: String, to list: TaskList?) {
+        append(title, completedAt: nil, list: list)
     }
 
     /// Apunta algo que ya esta terminado, para el caso de "esto lo acabo de
     /// hacer y quiero que conste". Es la via del ⌘Enter en la captura rapida.
     func addCompleted(_ title: String) {
-        append(title, completedAt: Date())
+        append(title, completedAt: Date(), list: nil)
     }
 
-    private func append(_ title: String, completedAt: Date?) {
+    private func append(_ title: String, completedAt: Date?, list: TaskList?) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
         var item = TodoItem(title: trimmed)
         item.completedAt = completedAt
+        item.listIdentifier = list?.id
+        item.listTitle = list?.title
         items.append(item)
     }
 

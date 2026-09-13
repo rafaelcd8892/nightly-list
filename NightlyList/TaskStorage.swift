@@ -4,7 +4,8 @@ import Foundation
 /// para poder migrar mas adelante sin tener que adivinar el formato.
 struct TaskFile: Codable, Equatable {
     /// 2: isDone paso a completedAt, y las tareas archivadas viven aparte.
-    static let currentVersion = 2
+    /// 3: cada tarea recuerda a que lista pertenece.
+    static let currentVersion = 3
 
     var version: Int
     var items: [TodoItem]

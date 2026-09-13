@@ -325,4 +325,37 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(after.completed.map(\.title), ["Pendiente de hoy"])
         XCTAssertTrue(after.created.isEmpty)
     }
+
+    // MARK: - Listas
+
+    func testAddingToAListStampsItOnTheTask() {
+        let store = makeStore()
+        let work = TaskList(id: "CAL-1", title: "Work", color: .blue)
+
+        store.add("Con lista", to: work)
+
+        XCTAssertEqual(store.items[0].listIdentifier, "CAL-1")
+        XCTAssertEqual(store.items[0].listTitle, "Work")
+    }
+
+    /// Sin filtro puesto la tarea no lleva lista, y eso significa "la de por
+    /// defecto", que es quien la resuelve al sincronizar.
+    func testAddingWithoutAListLeavesItUnassigned() {
+        let store = makeStore()
+
+        store.add("Sin lista", to: nil)
+
+        XCTAssertNil(store.items[0].listIdentifier)
+        XCTAssertNil(store.items[0].listTitle)
+    }
+
+    func testTheListSurvivesANewStoreOnTheSameFile() {
+        let first = makeStore()
+        first.add("Persistente", to: TaskList(id: "CAL-2", title: "Home", color: .green))
+
+        let second = makeStore()
+
+        XCTAssertEqual(second.items[0].listIdentifier, "CAL-2")
+        XCTAssertEqual(second.items[0].listTitle, "Home")
+    }
 }

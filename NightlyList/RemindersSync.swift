@@ -1,5 +1,6 @@
 import EventKit
 import Foundation
+import SwiftUI
 import Combine
 
 /// Gestiona la sincronizacion bidireccional entre las tareas de la app y
@@ -23,6 +24,9 @@ final class RemindersSync: ObservableObject {
         }
     }
     
+    /// Las listas de Recordatorios del usuario, para poder elegir y filtrar.
+    @Published private(set) var lists: [TaskList] = []
+
     /// Errores de sincronizacion para mostrar en la UI.
     @Published var lastSyncError: String?
     
@@ -123,8 +127,10 @@ final class RemindersSync: ObservableObject {
             // 1. Fundir duplicados que ya hubiera en la lista local
             mergeDuplicateLocalItems()
 
-            // 2. Obtener todos los recordatorios de la app Recordatorios
-            let predicate = eventStore.predicateForReminders(in: [defaultCalendar()])
+            // 2. Obtener los recordatorios de todas las listas, no solo de la
+            // de por defecto, que es lo que las colapsaba todas en una.
+            refreshLists()
+            let predicate = eventStore.predicateForReminders(in: reminderCalendars())
             let reminders = try await fetchReminders(matching: predicate)
             
             // 3. Obtener todas las tareas locales
@@ -155,7 +161,7 @@ final class RemindersSync: ObservableObject {
             // 6. Actualizar estado
             DiagnosticLog.shared.log(
                 .sync,
-                "Synced \(TaskStore.shared.items.count) tasks against \(reminders.count) reminders"
+                "Synced \(TaskStore.shared.items.count) tasks against \(reminders.count) reminders in \(lists.count) lists"
             )
             lastSyncError = nil
             lastSyncDate = Date()
@@ -186,24 +192,29 @@ final class RemindersSync: ObservableObject {
         remindersByID: [String: EKReminder]
     ) async throws {
         // Recordatorios que todavia no tiene ninguna tarea local, indexados
-        // por titulo: son los candidatos a adoptar en vez de duplicar.
+        // por lista y titulo: son los candidatos a adoptar en vez de duplicar.
         let claimedIDs = Set(localItems.compactMap(\.reminderIdentifier))
-        var unclaimedByTitle: [String: EKReminder] = [:]
+        var unclaimedByKey: [String: EKReminder] = [:]
         for reminder in remindersByID.values
         where !claimedIDs.contains(reminder.calendarItemIdentifier) {
-            let key = Self.normalizedTitle(reminder.title ?? "")
-            if unclaimedByTitle[key] == nil { unclaimedByTitle[key] = reminder }
+            let key = dedupeKey(list: reminder.calendar?.calendarIdentifier, title: reminder.title ?? "")
+            if unclaimedByKey[key] == nil { unclaimedByKey[key] = reminder }
         }
 
         for item in localItems {
             if let reminderID = item.reminderIdentifier,
                let existingReminder = remindersByID[reminderID] {
+                // La lista se reconcilia siempre, no solo cuando hay cambios
+                // que subir: si no, las tareas sincronizadas antes de que
+                // existieran las listas se quedaban sin ella para siempre.
+                adoptList(of: existingReminder, forItemWithID: item.id)
+
                 // Actualizar recordatorio existente si la tarea local es mas reciente
                 if shouldUpdateReminder(existingReminder, with: item) {
                     try updateReminder(existingReminder, from: item)
                 }
-            } else if let twin = unclaimedByTitle
-                .removeValue(forKey: Self.normalizedTitle(item.title)) {
+            } else if let twin = unclaimedByKey
+                .removeValue(forKey: dedupeKey(list: item.listIdentifier, title: item.title)) {
                 // Ya hay un recordatorio con ese titulo: se adopta. Crear uno
                 // nuevo es lo que dejaba la tarea por duplicado en los dos
                 // lados.
@@ -230,7 +241,8 @@ final class RemindersSync: ObservableObject {
                     updateLocalItem(from: reminder)
                 }
             } else if TaskStore.shared.items.contains(where: {
-                Self.normalizedTitle($0.title) == Self.normalizedTitle(reminder.title ?? "")
+                dedupeKey(list: $0.listIdentifier, title: $0.title)
+                    == dedupeKey(list: reminder.calendar?.calendarIdentifier, title: reminder.title ?? "")
             }) {
                 // Ya hay una tarea local con ese titulo: o se acaba de enlazar
                 // arriba, o la app Recordatorios tiene el recordatorio por
@@ -251,7 +263,7 @@ final class RemindersSync: ObservableObject {
         var merged: [TodoItem] = []
 
         for item in TaskStore.shared.items {
-            let key = Self.normalizedTitle(item.title)
+            let key = dedupeKey(list: item.listIdentifier, title: item.title)
 
             guard let index = survivorIndexByTitle[key] else {
                 survivorIndexByTitle[key] = merged.count
@@ -266,6 +278,8 @@ final class RemindersSync: ObservableObject {
                 survivor.lastModified = item.lastModified
             }
             survivor.reminderIdentifier = survivor.reminderIdentifier ?? item.reminderIdentifier
+            survivor.listIdentifier = survivor.listIdentifier ?? item.listIdentifier
+            survivor.listTitle = survivor.listTitle ?? item.listTitle
             merged[index] = survivor
         }
 
@@ -275,6 +289,27 @@ final class RemindersSync: ObservableObject {
             "Merged \(TaskStore.shared.items.count - merged.count) duplicates by title"
         )
         TaskStore.shared.items = merged
+    }
+
+    /// La clave de deduplicacion lleva la lista delante: el mismo titulo en
+    /// dos listas distintas son dos tareas legitimas, no un duplicado. Una
+    /// tarea sin lista se compara contra la de por defecto, que es donde
+    /// acabara.
+    private func dedupeKey(list: String?, title: String) -> String {
+        let listID = list ?? defaultCalendar().calendarIdentifier
+        return listID + "\u{1}" + Self.normalizedTitle(title)
+    }
+
+    /// Todas las listas de recordatorios del usuario.
+    private func reminderCalendars() -> [EKCalendar] {
+        let calendars = eventStore.calendars(for: .reminder)
+        return calendars.isEmpty ? [defaultCalendar()] : calendars
+    }
+
+    func refreshLists() {
+        lists = reminderCalendars().map {
+            TaskList(id: $0.calendarIdentifier, title: $0.title, color: Color(nsColor: $0.color))
+        }
     }
 
     /// Titulos comparables: sin espacios de sobra, sin distinguir mayusculas
@@ -296,7 +331,7 @@ final class RemindersSync: ObservableObject {
         
         let reminder = EKReminder(eventStore: eventStore)
         reminder.title = item.title
-        reminder.calendar = defaultCalendar()
+        reminder.calendar = calendar(withID: item.listIdentifier) ?? defaultCalendar()
         // completionDate manda: asignarla ya deja isCompleted en true, y
         // conserva el "cuando" en vez de solo el "si".
         reminder.completionDate = item.completedAt
@@ -362,6 +397,8 @@ final class RemindersSync: ObservableObject {
         // alimenta el registro del dia.
         item.createdAt = reminder.creationDate ?? Date()
         item.completedAt = Self.completionDate(of: reminder)
+        item.listIdentifier = reminder.calendar?.calendarIdentifier
+        item.listTitle = reminder.calendar?.title
 
         if let dueDateComponents = reminder.dueDateComponents,
            let dueDate = Calendar.current.date(from: dueDateComponents) {
@@ -383,6 +420,8 @@ final class RemindersSync: ObservableObject {
         var item = TaskStore.shared.items[index]
         item.title = reminder.title ?? item.title
         item.completedAt = Self.completionDate(of: reminder)
+        item.listIdentifier = reminder.calendar?.calendarIdentifier
+        item.listTitle = reminder.calendar?.title
         
         if let dueDateComponents = reminder.dueDateComponents,
            let dueDate = Calendar.current.date(from: dueDateComponents) {
@@ -396,14 +435,20 @@ final class RemindersSync: ObservableObject {
         TaskStore.shared.items[index] = item
     }
     
-    /// Actualiza una tarea local con el ID del recordatorio tras crearlo.
+    /// Actualiza una tarea local con el ID del recordatorio tras crearlo o
+    /// adoptarlo. Se lleva tambien la lista: al adoptar, la del recordatorio
+    /// manda; al crear, es la que acaba de recibir.
     private func updateLocalItem(_ item: TodoItem, withReminderID reminderID: String) {
         guard let index = TaskStore.shared.items.firstIndex(where: { $0.id == item.id }) else {
             return
         }
-        
+
         var updatedItem = TaskStore.shared.items[index]
         updatedItem.reminderIdentifier = reminderID
+        if let reminder = eventStore.calendarItem(withIdentifier: reminderID) as? EKReminder {
+            updatedItem.listIdentifier = reminder.calendar?.calendarIdentifier
+            updatedItem.listTitle = reminder.calendar?.title
+        }
         TaskStore.shared.items[index] = updatedItem
     }
     
@@ -480,6 +525,55 @@ final class RemindersSync: ObservableObject {
         }
     }
     
+    /// Cambia una tarea de lista, en local y en Recordatorios.
+    func move(_ item: TodoItem, to list: TaskList) async {
+        guard let index = TaskStore.shared.items.firstIndex(where: { $0.id == item.id }) else {
+            return
+        }
+
+        var moved = TaskStore.shared.items[index]
+        moved.listIdentifier = list.id
+        moved.listTitle = list.title
+        moved.lastModified = Date()
+        TaskStore.shared.items[index] = moved
+
+        guard isSyncEnabled,
+              let reminderID = moved.reminderIdentifier,
+              let reminder = eventStore.calendarItem(withIdentifier: reminderID) as? EKReminder,
+              let calendar = calendar(withID: list.id)
+        else { return }
+
+        reminder.calendar = calendar
+        do {
+            try eventStore.save(reminder, commit: true)
+            DiagnosticLog.shared.log(.sync, "Moved \"\(moved.title)\" to \(list.title)")
+        } catch {
+            lastSyncError = "Could not move the task: \(error.localizedDescription)"
+        }
+    }
+
+    /// Copia a la tarea la lista en la que vive su recordatorio. El
+    /// recordatorio manda: si se movio desde esta app, move() ya lo empujo
+    /// antes, y si se movio desde la app Recordatorios, esto lo recoge.
+    private func adoptList(of reminder: EKReminder, forItemWithID id: TodoItem.ID) {
+        guard let index = TaskStore.shared.items.firstIndex(where: { $0.id == id }) else { return }
+
+        let listID = reminder.calendar?.calendarIdentifier
+        let listTitle = reminder.calendar?.title
+        var item = TaskStore.shared.items[index]
+        guard item.listIdentifier != listID || item.listTitle != listTitle else { return }
+
+        item.listIdentifier = listID
+        item.listTitle = listTitle
+        TaskStore.shared.items[index] = item
+    }
+
+    private func calendar(withID identifier: String?) -> EKCalendar? {
+        guard let identifier else { return nil }
+        return eventStore.calendars(for: .reminder)
+            .first { $0.calendarIdentifier == identifier }
+    }
+
     /// Elimina una tarea de Recordatorios cuando se borra localmente.
     func deleteItem(_ item: TodoItem) async {
         guard isSyncEnabled else { return }

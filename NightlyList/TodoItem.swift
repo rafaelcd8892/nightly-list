@@ -18,6 +18,15 @@ struct TodoItem: Identifiable, Codable, Equatable {
 
     var dueDate: Date?
 
+    /// La lista a la que pertenece, que en EventKit es un EKCalendar. Nil
+    /// significa la lista por defecto del usuario.
+    var listIdentifier: String?
+
+    /// El nombre de la lista, guardado aparte para poder pintarlo sin
+    /// preguntarle a EventKit. La verdad es el identificador; esto se refresca
+    /// en cada sincronizacion.
+    var listTitle: String?
+
     /// Identificador del EKReminder correspondiente en la app Recordatorios.
     /// Nil si esta tarea no se ha sincronizado con Recordatorios.
     var reminderIdentifier: String?
@@ -50,6 +59,7 @@ struct TodoItem: Identifiable, Codable, Equatable {
 extension TodoItem {
     private enum CodingKeys: String, CodingKey {
         case id, title, createdAt, completedAt, archivedAt, dueDate
+        case listIdentifier, listTitle
         case reminderIdentifier, lastModified
         /// Solo se lee, nunca se escribe: es el campo de la version 1.
         case isDone
@@ -67,6 +77,8 @@ extension TodoItem {
         title = try container.decode(String.self, forKey: .title)
         dueDate = try container.decodeIfPresent(Date.self, forKey: .dueDate)
         reminderIdentifier = try container.decodeIfPresent(String.self, forKey: .reminderIdentifier)
+        listIdentifier = try container.decodeIfPresent(String.self, forKey: .listIdentifier)
+        listTitle = try container.decodeIfPresent(String.self, forKey: .listTitle)
         archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
 
         let modified = try container.decodeIfPresent(Date.self, forKey: .lastModified) ?? Date()
@@ -90,6 +102,8 @@ extension TodoItem {
         try container.encodeIfPresent(completedAt, forKey: .completedAt)
         try container.encodeIfPresent(archivedAt, forKey: .archivedAt)
         try container.encodeIfPresent(dueDate, forKey: .dueDate)
+        try container.encodeIfPresent(listIdentifier, forKey: .listIdentifier)
+        try container.encodeIfPresent(listTitle, forKey: .listTitle)
         try container.encodeIfPresent(reminderIdentifier, forKey: .reminderIdentifier)
         try container.encode(lastModified, forKey: .lastModified)
     }

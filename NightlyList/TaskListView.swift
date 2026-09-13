@@ -7,6 +7,9 @@ struct TaskListView: View {
     @State private var editingDateFor: TodoItem.ID?
     @State private var notificationsDenied = false
     @State private var mode: Mode = .pending
+    /// Lista por la que se filtra, o nil para todas.
+    @State private var listFilter: TaskList?
+    @StateObject private var sync = RemindersSync.shared
 
     /// Con pocas tareas dejamos crecer el popover; a partir de aqui scrollea.
     private let maxVisibleRows = 8
@@ -28,11 +31,17 @@ struct TaskListView: View {
                     .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
             }
 
-            Picker("", selection: $mode) {
-                ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+            HStack(spacing: 8) {
+                Picker("", selection: $mode) {
+                    ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                if !sync.lists.isEmpty {
+                    listFilterMenu
+                }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
 
             switch mode {
             case .pending:
@@ -117,15 +126,45 @@ struct TaskListView: View {
     private var taskRows: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach($store.items) { $item in
-                TaskRow(
-                    item: $item,
-                    isEditingDate: editingDateFor == item.id,
-                    onToggleDateEditor: { toggleDateEditor(for: $item) },
-                    onDueDateChanged: askForNotificationPermission,
-                    onDelete: { store.remove(item) }
-                )
+                if matches(item) {
+                    TaskRow(
+                        item: $item,
+                        isEditingDate: editingDateFor == item.id,
+                        onToggleDateEditor: { toggleDateEditor(for: $item) },
+                        onDueDateChanged: askForNotificationPermission,
+                        onDelete: { store.remove(item) }
+                    )
+                }
             }
         }
+    }
+
+    private var listFilterMenu: some View {
+        Menu {
+            Button("All lists") { listFilter = nil }
+            Divider()
+            ForEach(sync.lists) { list in
+                Button {
+                    listFilter = list
+                } label: {
+                    Label {
+                        Text(list.title)
+                    } icon: {
+                        Image(systemName: "circle.fill").foregroundStyle(list.color)
+                    }
+                }
+            }
+        } label: {
+            Text(listFilter?.title ?? "All lists")
+                .font(.caption)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private func matches(_ item: TodoItem) -> Bool {
+        guard let listFilter else { return true }
+        return item.listIdentifier == listFilter.id
     }
 
     private func toggleDateEditor(for item: Binding<TodoItem>) {
@@ -152,7 +191,7 @@ struct TaskListView: View {
 
 private extension TaskListView {
     func add() {
-        store.add(newTitle)
+        store.add(newTitle, to: listFilter)
         newTitle = ""
     }
 }
@@ -181,6 +220,8 @@ private struct TaskRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+
+                ListDot(listIdentifier: item.listIdentifier, listTitle: item.listTitle)
 
                 if let reference = item.ticketReference {
                     TicketChip(reference: reference)
@@ -273,6 +314,18 @@ private struct TaskRow: View {
                 Button("Remove reminder") {
                     item.dueDate = nil
                     item.lastModified = Date()
+                }
+            }
+
+            if !RemindersSync.shared.lists.isEmpty {
+                Menu("Move to") {
+                    ForEach(RemindersSync.shared.lists) { list in
+                        Button(list.title) {
+                            let moved = item
+                            Task { await RemindersSync.shared.move(moved, to: list) }
+                        }
+                        .disabled(list.id == item.listIdentifier)
+                    }
                 }
             }
 
@@ -425,6 +478,8 @@ private struct DayReportView: View {
             .buttonStyle(.plain)
             .help(done ? "Mark as open" : "Mark as done")
 
+            ListDot(listIdentifier: item.listIdentifier, listTitle: item.listTitle)
+
             if let reference = item.ticketReference {
                 TicketChip(reference: reference)
             }
@@ -459,5 +514,32 @@ private struct TicketChip: View {
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 3))
             .foregroundStyle(.secondary)
             .help("Detected project reference")
+    }
+}
+
+/// El color de la lista a la que pertenece la tarea.
+///
+/// Resuelve el color contra las listas que trae la sincronizacion en vez de
+/// recibirlo por parametro, para no tener que hilarlo por media interfaz. Si
+/// la lista ya no existe pero la tarea recuerda su nombre, se pinta en gris.
+private struct ListDot: View {
+    let listIdentifier: String?
+    let listTitle: String?
+    @ObservedObject private var sync = RemindersSync.shared
+
+    var body: some View {
+        if let listIdentifier,
+           let list = sync.lists.first(where: { $0.id == listIdentifier }) {
+            dot(list.color, name: list.title)
+        } else if let listTitle {
+            dot(.secondary, name: listTitle)
+        }
+    }
+
+    private func dot(_ color: Color, name: String) -> some View {
+        Circle()
+            .fill(color)
+            .frame(width: 7, height: 7)
+            .help(name)
     }
 }

@@ -117,7 +117,7 @@ final class TaskStorageTests: XCTestCase {
             with: Data(contentsOf: storage.fileURL)
         ) as? [String: Any]
 
-        XCTAssertEqual(raw?["version"] as? Int, 2)
+        XCTAssertEqual(raw?["version"] as? Int, 3, "subir la version es deliberado: obliga a pensar si los ficheros viejos siguen leyendose")
     }
 
     // MARK: - Migracion desde UserDefaults
@@ -209,5 +209,34 @@ final class TaskStorageTests: XCTestCase {
 
         XCTAssertTrue(text.contains("completedAt"))
         XCTAssertFalse(text.contains("isDone"))
+    }
+}
+
+extension TaskStorageTests {
+    // MARK: - Version 3: listas
+
+    func testListAssignmentRoundTrips() throws {
+        var item = TodoItem(title: "De trabajo")
+        item.createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        item.lastModified = item.createdAt
+        item.listIdentifier = "CAL-123"
+        item.listTitle = "Work"
+
+        try storage.save([item])
+
+        XCTAssertEqual(try storage.load().items, [item])
+    }
+
+    /// Los ficheros anteriores no traen lista, y eso no es un error: significa
+    /// la lista por defecto.
+    func testVersion2FileWithoutAListLoadsWithNone() throws {
+        let json = #"{"version":2,"items":[{"id":"44444444-4444-4444-4444-444444444444","title":"Sin lista","createdAt":"2026-08-15T08:00:00.000Z","lastModified":"2026-08-15T08:00:00.000Z"}]}"#
+        try Data(json.utf8).write(to: storage.fileURL)
+
+        let item = try XCTUnwrap(try storage.load().items.first)
+
+        XCTAssertNil(item.listIdentifier)
+        XCTAssertNil(item.listTitle)
+        XCTAssertEqual(item.title, "Sin lista")
     }
 }
