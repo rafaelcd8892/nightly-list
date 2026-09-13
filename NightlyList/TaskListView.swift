@@ -130,14 +130,7 @@ struct TaskListView: View {
         Menu {
             Button("Main Window…") { MainWindowController.shared.show() }
 
-            SettingsLink {
-                Text("Settings…")
-            }
-            // Una app LSUIElement no se pone delante sola: sin esto la ventana
-            // se abre detras de todo.
-            .simultaneousGesture(TapGesture().onEnded {
-                NSApp.activate(ignoringOtherApps: true)
-            })
+            Button("Settings…") { SettingsWindowController.shared.show() }
 
             Divider()
 

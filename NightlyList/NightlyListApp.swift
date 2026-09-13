@@ -13,12 +13,14 @@ import UserNotifications
 struct NightlyListApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
-    /// La unica escena de SwiftUI. El icono de la barra y la ventana principal
-    /// se gestionan con AppKit desde el delegado, porque MenuBarExtra no
-    /// distingue el boton del raton y no deja poner menu contextual.
+    /// Una App tiene que declarar al menos una escena, pero esta app no usa
+    /// ninguna: el icono de la barra, la ventana principal y la de Ajustes se
+    /// gestionan con AppKit desde el delegado. MenuBarExtra no distingue el
+    /// boton del raton, y la escena Settings no se deja abrir desde fuera de
+    /// una vista. Queda declarada y vacia a proposito.
     var body: some Scene {
         Settings {
-            SettingsView()
+            EmptyView()
         }
     }
 }

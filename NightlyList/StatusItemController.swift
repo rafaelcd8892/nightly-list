@@ -110,18 +110,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     }
 
     @objc private func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
-
-        // sendAction recorre la cadena de respondedores. responds(to:) solo
-        // pregunta a NSApplication, y la accion de Ajustes no vive ahi: por eso
-        // no abria desde el menu mientras el SettingsLink del popover si.
-        // El selector cambio de nombre en macOS 14, se prueban los dos.
-        for selector in [Selector(("showSettingsWindow:")), Selector(("showPreferencesWindow:"))]
-        where NSApp.sendAction(selector, to: nil, from: nil) {
-            return
-        }
-
-        DiagnosticLog.shared.log(.app, "Could not open Settings from the status item menu")
+        SettingsWindowController.shared.show()
     }
 
     @objc private func archiveDone() {
