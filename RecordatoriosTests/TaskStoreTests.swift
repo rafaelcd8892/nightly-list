@@ -142,4 +142,92 @@ final class TaskStoreTests: XCTestCase {
 
         XCTAssertEqual(makeStore().items.map(\.title), ["B"])
     }
+
+    // MARK: - Archivo
+
+    /// "Limpiar hechas" ya no borra: lo hecho es el registro del dia.
+    func testClearDoneArchivesInsteadOfDeleting() {
+        let store = makeStore()
+        ["A", "B"].forEach(store.add)
+        store.items[0].isDone = true
+
+        store.clearDone()
+
+        XCTAssertEqual(store.items.map(\.title), ["B"])
+        XCTAssertEqual(store.archived.map(\.title), ["A"])
+        XCTAssertNotNil(store.archived.first?.archivedAt)
+        XCTAssertNotNil(store.archived.first?.completedAt, "la fecha de completado se conserva")
+    }
+
+    func testUndoTakesTheTaskBackOutOfTheArchive() {
+        let store = makeStore()
+        ["A", "B"].forEach(store.add)
+        store.items[0].isDone = true
+        store.clearDone()
+
+        store.undoRemoval()
+
+        XCTAssertEqual(store.items.map(\.title), ["A", "B"])
+        XCTAssertTrue(store.archived.isEmpty)
+        XCTAssertNil(store.items.first?.archivedAt, "al volver deja de estar archivada")
+    }
+
+    /// La x es un borrado intencionado, no limpieza: esa si desaparece.
+    func testDeletingWithTheCrossDoesNotArchive() {
+        let store = makeStore()
+        store.add("A")
+
+        store.remove(store.items[0])
+
+        XCTAssertTrue(store.items.isEmpty)
+        XCTAssertTrue(store.archived.isEmpty)
+    }
+
+    func testArchiveSurvivesANewStoreOnTheSameFile() {
+        let first = makeStore()
+        first.add("Archivame")
+        first.items[0].isDone = true
+        first.clearDone()
+
+        let second = makeStore()
+
+        XCTAssertTrue(second.items.isEmpty)
+        XCTAssertEqual(second.archived.map(\.title), ["Archivame"])
+    }
+
+    // MARK: - completedAt
+
+    func testMarkingDoneStampsACompletionDate() {
+        let store = makeStore()
+        store.add("A")
+        XCTAssertNil(store.items[0].completedAt)
+
+        store.items[0].isDone = true
+
+        XCTAssertNotNil(store.items[0].completedAt)
+    }
+
+    func testUnmarkingClearsTheCompletionDate() {
+        let store = makeStore()
+        store.add("A")
+        store.items[0].isDone = true
+
+        store.items[0].isDone = false
+
+        XCTAssertNil(store.items[0].completedAt)
+        XCTAssertFalse(store.items[0].isDone)
+    }
+
+    /// Volver a marcar hecha algo que ya lo estaba no debe mover la fecha:
+    /// si no, la sincronizacion con Recordatorios falsearia el registro.
+    func testMarkingDoneTwiceKeepsTheOriginalDate() {
+        let store = makeStore()
+        store.add("A")
+        store.items[0].isDone = true
+        let first = store.items[0].completedAt
+
+        store.items[0].isDone = true
+
+        XCTAssertEqual(store.items[0].completedAt, first)
+    }
 }

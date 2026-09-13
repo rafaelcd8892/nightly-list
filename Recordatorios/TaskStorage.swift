@@ -3,14 +3,27 @@ import Foundation
 /// Lo que se guarda en disco. El numero de version esta desde el primer dia
 /// para poder migrar mas adelante sin tener que adivinar el formato.
 struct TaskFile: Codable, Equatable {
-    static let currentVersion = 1
+    /// 2: isDone paso a completedAt, y las tareas archivadas viven aparte.
+    static let currentVersion = 2
 
     var version: Int
     var items: [TodoItem]
+    /// Lo que salio de la lista activa con "Limpiar hechas". Se guarda en vez
+    /// de borrarse porque es el registro de lo que se hizo.
+    var archived: [TodoItem]
 
-    init(items: [TodoItem], version: Int = TaskFile.currentVersion) {
+    init(items: [TodoItem], archived: [TodoItem] = [], version: Int = TaskFile.currentVersion) {
         self.version = version
         self.items = items
+        self.archived = archived
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        items = try container.decode([TodoItem].self, forKey: .items)
+        // Los ficheros de la version 1 no traen archivo.
+        archived = try container.decodeIfPresent([TodoItem].self, forKey: .archived) ?? []
     }
 }
 
@@ -48,8 +61,10 @@ struct TaskStorage {
     }
 
     /// Un fichero que aun no existe no es un error: es una instalacion nueva.
-    func load() throws -> [TodoItem] {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
+    func load() throws -> TaskFile {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return TaskFile(items: [])
+        }
 
         let file = try Self.decoder.decode(TaskFile.self, from: Data(contentsOf: fileURL))
         guard file.version <= TaskFile.currentVersion else {
@@ -60,15 +75,15 @@ struct TaskStorage {
                 supported: TaskFile.currentVersion
             )
         }
-        return file.items
+        return file
     }
 
-    func save(_ items: [TodoItem]) throws {
+    func save(_ items: [TodoItem], archived: [TodoItem] = []) throws {
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        let data = try Self.encoder.encode(TaskFile(items: items))
+        let data = try Self.encoder.encode(TaskFile(items: items, archived: archived))
         // Atomico: un corte a media escritura deja el fichero anterior intacto
         // en vez de uno truncado.
         try data.write(to: fileURL, options: .atomic)

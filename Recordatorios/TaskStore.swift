@@ -22,6 +22,12 @@ final class TaskStore: ObservableObject {
         }
     }
 
+    /// Lo que salio de la lista con "Limpiar hechas". No se borra porque es
+    /// el registro de lo que se hizo.
+    @Published private(set) var archived: [TodoItem] = [] {
+        didSet { save() }
+    }
+
     /// Lo ultimo que se quito de la lista, para poder deshacerlo.
     @Published private var lastRemoval: [Removal] = []
 
@@ -39,12 +45,20 @@ final class TaskStore: ObservableObject {
 
     private static let legacyDefaultsKey = "todo.items"
 
+    private static let isRunningTests =
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
     /// El storage se inyecta para poder montar el store contra un directorio
     /// temporal en los tests.
     init(storage: TaskStorage? = nil, systemSyncEnabled: Bool = true) {
         self.systemSyncEnabled = systemSyncEnabled
         if let storage {
             self.storage = storage
+        } else if Self.isRunningTests {
+            // Los tests corren hospedados en la app, asi que al arrancar el
+            // host se crearia TaskStore.shared sobre el fichero real del
+            // usuario. Cada pasada de tests le reescribiria sus tareas.
+            self.storage = nil
         } else if let url = try? TaskStorage.defaultFileURL() {
             self.storage = TaskStorage(fileURL: url)
         } else {
@@ -70,7 +84,8 @@ final class TaskStore: ObservableObject {
 
     func remove(_ item: TodoItem) {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
-        lastRemoval = [Removal(item: items[index], index: index)]
+        // La x es un borrado intencionado, no limpieza: esa si desaparece.
+        lastRemoval = [Removal(item: items[index], index: index, wasArchived: false)]
         
         // Eliminar de Recordatorios si esta sincronizado
         if systemSyncEnabled {
@@ -83,24 +98,27 @@ final class TaskStore: ObservableObject {
         items.remove(at: index)
     }
 
+    /// Retira las hechas de la lista activa y las manda al archivo.
+    ///
+    /// No borra: antes se llevaba por delante el registro del dia. Tampoco
+    /// borra el recordatorio en la app Recordatorios, que guarda las
+    /// completadas y es parte del mismo registro.
     func clearDone() {
+        let stamp = Date()
         let removed = items.enumerated()
             .filter { $0.element.isDone }
-            .map { Removal(item: $0.element, index: $0.offset) }
-        guard !removed.isEmpty else { return }
-        lastRemoval = removed
-        
-        // Eliminar de Recordatorios los que estan sincronizados
-        if systemSyncEnabled {
-            let removedItems = removed.map { $0.item }
-            Task {
-                for item in removedItems {
-                    await RemindersSync.shared.deleteItem(item)
-                }
+            .map { offset, item -> Removal in
+                var archivedItem = item
+                archivedItem.archivedAt = stamp
+                return Removal(item: archivedItem, index: offset, wasArchived: true)
             }
-        }
-        
+        guard !removed.isEmpty else { return }
+
+        lastRemoval = removed
+        archived.append(contentsOf: removed.map(\.item))
         items.removeAll { $0.isDone }
+
+        DiagnosticLog.shared.log(.storage, "Archivadas \(removed.count) tareas hechas")
     }
 
     /// Reinserta lo ultimo que se quito, en su posicion original. Vale tanto
@@ -109,8 +127,15 @@ final class TaskStore: ObservableObject {
         guard !lastRemoval.isEmpty else { return }
         // De indice menor a mayor: asi cada insercion deja hueco para la
         // siguiente y el orden original se reconstruye.
+        let returning = Set(lastRemoval.filter(\.wasArchived).map(\.item.id))
+        if !returning.isEmpty {
+            archived.removeAll { returning.contains($0.id) }
+        }
+
         for removal in lastRemoval.sorted(by: { $0.index < $1.index }) {
-            items.insert(removal.item, at: min(removal.index, items.count))
+            var item = removal.item
+            item.archivedAt = nil
+            items.insert(item, at: min(removal.index, items.count))
         }
         lastRemoval = []
     }
@@ -118,7 +143,7 @@ final class TaskStore: ObservableObject {
     private func save() {
         guard let storage else { return }
         do {
-            try storage.save(items)
+            try storage.save(items, archived: archived)
             storageError = nil
         } catch {
             storageError = "No se pudieron guardar las tareas: \(error.localizedDescription)"
@@ -128,7 +153,9 @@ final class TaskStore: ObservableObject {
 
     private func load() {
         guard let storage else {
-            storageError = "No se pudo abrir la carpeta de datos de la app."
+            if !Self.isRunningTests {
+                storageError = "No se pudo abrir la carpeta de datos de la app."
+            }
             return
         }
         do {
@@ -138,9 +165,13 @@ final class TaskStore: ObservableObject {
             let loaded = try storage.load()
             // Asignar aunque venga vacio dispararia el didSet y reescribiria el
             // fichero en cada arranque; solo interesa cuando hay algo.
-            if !loaded.isEmpty { items = loaded }
+            if !loaded.items.isEmpty { items = loaded.items }
+            if !loaded.archived.isEmpty { archived = loaded.archived }
             storageError = nil
-            DiagnosticLog.shared.log(.storage, "Cargadas \(loaded.count) tareas")
+            DiagnosticLog.shared.log(
+                .storage,
+                "Cargadas \(loaded.items.count) tareas y \(loaded.archived.count) archivadas"
+            )
         } catch {
             storageError = "No se pudieron leer las tareas: \(error.localizedDescription)"
             DiagnosticLog.shared.log(.storage, "Fallo al leer: \(error.localizedDescription)")
@@ -152,5 +183,8 @@ private extension TaskStore {
     struct Removal {
         let item: TodoItem
         let index: Int
+        /// true si fue al archivo; false si se borro de verdad. Deshacer tiene
+        /// que sacarla del archivo en el primer caso.
+        let wasArchived: Bool
     }
 }

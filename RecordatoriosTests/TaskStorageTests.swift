@@ -22,7 +22,7 @@ final class TaskStorageTests: XCTestCase {
     // MARK: - Lectura y escritura
 
     func testLoadWithoutFileReturnsEmpty() throws {
-        XCTAssertEqual(try storage.load(), [])
+        XCTAssertEqual(try storage.load().items, [])
     }
 
     /// Las fechas se guardan al milisegundo, asi que el item de ida tiene que
@@ -31,19 +31,21 @@ final class TaskStorageTests: XCTestCase {
     func testSaveThenLoadRoundTripsEveryField() throws {
         var conFecha = TodoItem(
             title: "Con fecha",
-            isDone: false,
             dueDate: Date(timeIntervalSince1970: 1_800_000_000)
         )
         conFecha.reminderIdentifier = "ABC-123"
+        conFecha.createdAt = Date(timeIntervalSince1970: 1_699_000_000.250)
         conFecha.lastModified = Date(timeIntervalSince1970: 1_700_000_000.500)
 
-        var hecha = TodoItem(title: "Hecha", isDone: true)
+        var hecha = TodoItem(title: "Hecha")
+        hecha.createdAt = Date(timeIntervalSince1970: 1_699_000_001.500)
+        hecha.completedAt = Date(timeIntervalSince1970: 1_700_000_000.750)
         hecha.lastModified = Date(timeIntervalSince1970: 1_700_000_001.250)
 
         let items = [conFecha, hecha]
         try storage.save(items)
 
-        XCTAssertEqual(try storage.load(), items)
+        XCTAssertEqual(try storage.load().items, items)
     }
 
     /// Los microsegundos de un Date recien creado no sobreviven: el formato
@@ -54,7 +56,7 @@ final class TaskStorageTests: XCTestCase {
 
         try storage.save([item])
 
-        let recovered = try XCTUnwrap(try storage.load().first).lastModified
+        let recovered = try XCTUnwrap(try storage.load().items.first).lastModified
         XCTAssertEqual(
             recovered.timeIntervalSince1970,
             1_700_000_000.123,
@@ -67,18 +69,19 @@ final class TaskStorageTests: XCTestCase {
     func testSavePreservesSubSecondPrecision() throws {
         let precise = Date(timeIntervalSince1970: 1_800_000_000.123)
         var item = TodoItem(title: "Precisa")
+        item.createdAt = precise
         item.lastModified = precise
 
         try storage.save([item])
 
-        XCTAssertEqual(try storage.load().first?.lastModified, precise)
+        XCTAssertEqual(try storage.load().items.first?.lastModified, precise)
     }
 
     func testSaveReplacesPreviousContents() throws {
         try storage.save([TodoItem(title: "Primera")])
         try storage.save([TodoItem(title: "Segunda")])
 
-        XCTAssertEqual(try storage.load().map(\.title), ["Segunda"])
+        XCTAssertEqual(try storage.load().items.map(\.title), ["Segunda"])
     }
 
     func testSaveCreatesMissingIntermediateDirectories() throws {
@@ -89,7 +92,7 @@ final class TaskStorageTests: XCTestCase {
 
         try deepStorage.save([TodoItem(title: "Honda")])
 
-        XCTAssertEqual(try deepStorage.load().map(\.title), ["Honda"])
+        XCTAssertEqual(try deepStorage.load().items.map(\.title), ["Honda"])
     }
 
     /// Un fichero de una version futura se rechaza entero: cargarlo a medias
@@ -114,21 +117,21 @@ final class TaskStorageTests: XCTestCase {
             with: Data(contentsOf: storage.fileURL)
         ) as? [String: Any]
 
-        XCTAssertEqual(raw?["version"] as? Int, TaskFile.currentVersion)
+        XCTAssertEqual(raw?["version"] as? Int, 2)
     }
 
     // MARK: - Migracion desde UserDefaults
 
     func testMigrationMovesLegacyBlobIntoFileAndDropsTheKey() throws {
         let defaults = UserDefaults(suiteName: suiteName)!
-        let legacy = [TodoItem(title: "De UserDefaults", isDone: true)]
+        let legacy = [TodoItem(title: "De UserDefaults")]
         // El blob viejo se escribia con un JSONEncoder sin configurar.
         defaults.set(try JSONEncoder().encode(legacy), forKey: "todo.items")
 
         let migrated = try storage.migrateLegacyDefaults(from: defaults, key: "todo.items")
 
         XCTAssertTrue(migrated)
-        XCTAssertEqual(try storage.load().map(\.title), ["De UserDefaults"])
+        XCTAssertEqual(try storage.load().items.map(\.title), ["De UserDefaults"])
         XCTAssertNil(defaults.data(forKey: "todo.items"), "la clave vieja deberia quedar borrada")
     }
 
@@ -140,7 +143,7 @@ final class TaskStorageTests: XCTestCase {
         let migrated = try storage.migrateLegacyDefaults(from: defaults, key: "todo.items")
 
         XCTAssertFalse(migrated)
-        XCTAssertEqual(try storage.load().map(\.title), ["La del fichero"], "manda el fichero")
+        XCTAssertEqual(try storage.load().items.map(\.title), ["La del fichero"], "manda el fichero")
         XCTAssertNotNil(defaults.data(forKey: "todo.items"), "y no se toca la clave vieja")
     }
 
@@ -148,6 +151,63 @@ final class TaskStorageTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
 
         XCTAssertFalse(try storage.migrateLegacyDefaults(from: defaults, key: "todo.items"))
-        XCTAssertEqual(try storage.load(), [])
+        XCTAssertEqual(try storage.load().items, [])
+    }
+
+    // MARK: - Version 2: completedAt y archivo
+
+    /// Un fichero de la version 1 traia isDone booleano y ninguna fecha de
+    /// completado. Al convertirlo se usa lastModified como aproximacion.
+    func testVersion1FileConvertsIsDoneIntoACompletionDate() throws {
+        let hecha = #"{"id":"11111111-1111-1111-1111-111111111111","title":"Hecha en la v1","isDone":true,"lastModified":"2026-09-01T10:30:00.000Z"}"#
+        let pendiente = #"{"id":"22222222-2222-2222-2222-222222222222","title":"Pendiente en la v1","isDone":false,"lastModified":"2026-09-01T10:30:00.000Z"}"#
+        let json = #"{"version":1,"items":["# + hecha + "," + pendiente + "]}"
+        try Data(json.utf8).write(to: storage.fileURL)
+
+        let items = try storage.load().items
+
+        XCTAssertEqual(items.count, 2)
+        XCTAssertTrue(items[0].isDone)
+        XCTAssertEqual(items[0].completedAt, items[0].lastModified)
+        XCTAssertFalse(items[1].isDone)
+        XCTAssertNil(items[1].completedAt)
+    }
+
+    /// Sin createdAt en el fichero viejo, la fecha de creacion tambien sale
+    /// de lastModified.
+    func testVersion1FileFallsBackToLastModifiedAsCreationDate() throws {
+        let json = #"{"version":1,"items":[{"id":"33333333-3333-3333-3333-333333333333","title":"Sin createdAt","isDone":false,"lastModified":"2026-08-15T08:00:00.000Z"}]}"#
+        try Data(json.utf8).write(to: storage.fileURL)
+
+        let item = try XCTUnwrap(try storage.load().items.first)
+
+        XCTAssertEqual(item.createdAt, item.lastModified)
+    }
+
+    func testArchivedTasksRoundTripSeparatelyFromActiveOnes() throws {
+        var archivedItem = TodoItem(title: "Archivada")
+        archivedItem.createdAt = Date(timeIntervalSince1970: 1_699_000_000.000)
+        archivedItem.completedAt = Date(timeIntervalSince1970: 1_700_000_000.000)
+        archivedItem.archivedAt = Date(timeIntervalSince1970: 1_700_000_100.000)
+        archivedItem.lastModified = Date(timeIntervalSince1970: 1_700_000_100.000)
+
+        try storage.save([TodoItem(title: "Activa")], archived: [archivedItem])
+
+        let file = try storage.load()
+        XCTAssertEqual(file.items.map(\.title), ["Activa"])
+        XCTAssertEqual(file.archived, [archivedItem])
+    }
+
+    /// isDone es una fachada sobre completedAt y no debe llegar al fichero:
+    /// si se escribiera, un lector antiguo se creeria al dia.
+    func testSavedFileDoesNotWriteTheLegacyIsDoneField() throws {
+        var item = TodoItem(title: "Hecha")
+        item.isDone = true
+        try storage.save([item])
+
+        let text = try String(contentsOf: storage.fileURL, encoding: .utf8)
+
+        XCTAssertTrue(text.contains("completedAt"))
+        XCTAssertFalse(text.contains("isDone"))
     }
 }

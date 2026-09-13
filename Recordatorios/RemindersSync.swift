@@ -296,8 +296,10 @@ final class RemindersSync: ObservableObject {
         
         let reminder = EKReminder(eventStore: eventStore)
         reminder.title = item.title
-        reminder.isCompleted = item.isDone
         reminder.calendar = defaultCalendar()
+        // completionDate manda: asignarla ya deja isCompleted en true, y
+        // conserva el "cuando" en vez de solo el "si".
+        reminder.completionDate = item.completedAt
         
         if let dueDate = item.dueDate {
             let components = Calendar.current.dateComponents(
@@ -320,7 +322,7 @@ final class RemindersSync: ObservableObject {
     /// Actualiza un recordatorio existente con los datos de una tarea local.
     func updateReminder(_ reminder: EKReminder, from item: TodoItem) throws {
         reminder.title = item.title
-        reminder.isCompleted = item.isDone
+        reminder.completionDate = item.completedAt
         
         if let dueDate = item.dueDate {
             let components = Calendar.current.dateComponents(
@@ -354,11 +356,13 @@ final class RemindersSync: ObservableObject {
     
     /// Crea una tarea local desde un recordatorio de la app Recordatorios.
     private func createLocalItem(from reminder: EKReminder) {
-        var item = TodoItem(
-            title: reminder.title ?? "Sin título",
-            isDone: reminder.isCompleted
-        )
-        
+        var item = TodoItem(title: reminder.title ?? "Sin título")
+
+        // Las fechas reales de Recordatorios, no aproximaciones: son lo que
+        // alimenta el registro del dia.
+        item.createdAt = reminder.creationDate ?? Date()
+        item.completedAt = Self.completionDate(of: reminder)
+
         if let dueDateComponents = reminder.dueDateComponents,
            let dueDate = Calendar.current.date(from: dueDateComponents) {
             item.dueDate = dueDate
@@ -378,7 +382,7 @@ final class RemindersSync: ObservableObject {
         
         var item = TaskStore.shared.items[index]
         item.title = reminder.title ?? item.title
-        item.isDone = reminder.isCompleted
+        item.completedAt = Self.completionDate(of: reminder)
         
         if let dueDateComponents = reminder.dueDateComponents,
            let dueDate = Calendar.current.date(from: dueDateComponents) {
@@ -419,6 +423,13 @@ final class RemindersSync: ObservableObject {
     
     // MARK: - Helpers
     
+    /// Recordatorios puede marcar una tarea como completada sin dejar fecha.
+    /// En ese caso hay que inventar una o la tarea quedaria como pendiente.
+    private static func completionDate(of reminder: EKReminder) -> Date? {
+        guard reminder.isCompleted else { return nil }
+        return reminder.completionDate ?? reminder.lastModifiedDate ?? Date()
+    }
+
     /// El calendario de recordatorios por defecto del usuario.
     private func defaultCalendar() -> EKCalendar {
         eventStore.defaultCalendarForNewReminders() ?? {
