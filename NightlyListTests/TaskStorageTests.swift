@@ -117,7 +117,7 @@ final class TaskStorageTests: XCTestCase {
             with: Data(contentsOf: storage.fileURL)
         ) as? [String: Any]
 
-        XCTAssertEqual(raw?["version"] as? Int, 3, "subir la version es deliberado: obliga a pensar si los ficheros viejos siguen leyendose")
+        XCTAssertEqual(raw?["version"] as? Int, 4, "subir la version es deliberado: obliga a pensar si los ficheros viejos siguen leyendose")
     }
 
     // MARK: - Migracion desde UserDefaults

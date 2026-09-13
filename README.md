@@ -10,14 +10,18 @@ to a model, a standup, or an invoice.
 
 ## What it does
 
-- **Quick capture** with ⌥Space from anywhere. `⌘⏎` records something you have
-  already finished, for the things you do before you think to write them down.
+- **Quick capture** with ⌃⌥⌘N from anywhere, and you can change the shortcut in
+  Settings. `⌘⏎` records something you have already finished, for the things you
+  do before you think to write them down.
 - **Today** shows what you completed and what you added, and exports the day as
   Markdown with your own summary prompt appended.
 - **Ticket detection** picks up references like `ABC-123` in a task title and
   groups the exported day by them.
 - **Apple Reminders sync** in both directions, so your tasks reach your iPhone
   and iPad through iCloud without this app running a server.
+- **Notes, priority and links** round-trip with Reminders instead of being
+  dropped, and the day's export carries the notes with it. Repeat rules are
+  shown but not edited here, so the ones you set up in Reminders stay intact.
 - Reminders with notifications, rename in place, undo, and an archive: clearing
   completed tasks files them away instead of destroying the record.
 

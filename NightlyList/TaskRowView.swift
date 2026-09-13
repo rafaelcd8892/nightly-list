@@ -65,6 +65,8 @@ struct TaskRow: View {
                     }
                 }
 
+                TaskBadges(item: item)
+
                 Spacer()
 
                 Button(action: onToggleDateEditor) {
@@ -118,6 +120,22 @@ struct TaskRow: View {
                     item.dueDate = nil
                     item.lastModified = Date()
                 }
+            }
+
+            Menu("Priority") {
+                ForEach(TaskPriority.allCases) { level in
+                    Button(level.menuTitle) {
+                        item.priority = level
+                        item.lastModified = Date()
+                    }
+                    .disabled(level == item.priority)
+                }
+            }
+
+            Button("Details…") { TaskDetailsWindowController.shared.show(item.id) }
+
+            if let url = item.url {
+                Button("Open link") { NSWorkspace.shared.open(url) }
             }
 
             if !RemindersSync.shared.lists.isEmpty {
@@ -183,6 +201,43 @@ func suggestedDueDate() -> Date {
         second: 0,
         of: nextHour
     ) ?? nextHour
+}
+
+/// Prioridad, notas, enlace y repeticion, en pequeño y sin ocupar una linea.
+///
+/// Son de solo lectura: enseñan que el campo esta ahi, y editarlo es cosa de
+/// la ventana de detalles. Una tarea sin ninguno de los cuatro no pinta nada,
+/// que es el caso comun.
+struct TaskBadges: View {
+    let item: TodoItem
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if item.priority != .none {
+                Text(item.priority.marker)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(item.priority == .low ? Color.orange : Color.red)
+                    .help("\(item.priority.title) priority")
+            }
+
+            if item.hasNotes {
+                Image(systemName: "text.alignleft")
+                    .help("Has notes")
+            }
+
+            if let url = item.url {
+                Image(systemName: "link")
+                    .help(url.absoluteString)
+            }
+
+            if let repetition = item.recurrenceSummary {
+                Image(systemName: "repeat")
+                    .help(repetition)
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+    }
 }
 
 /// La referencia de ticket detectada en el titulo, en pequeño.

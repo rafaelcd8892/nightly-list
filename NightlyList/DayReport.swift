@@ -99,28 +99,40 @@ struct DayReport {
 
         guard hasReferences else {
             return items.sorted(by: chronologically)
-                .map { line(for: $0, showTime: showTime) } + [""]
+                .flatMap { lines(for: $0, showTime: showTime) } + [""]
         }
 
-        var lines: [String] = []
+        var result: [String] = []
         for group in groups {
-            lines += ["### \(group.reference ?? "No ticket") (\(group.items.count))", ""]
-            lines += group.items.map { line(for: $0, showTime: showTime) }
-            lines.append("")
+            result += ["### \(group.reference ?? "No ticket") (\(group.items.count))", ""]
+            result += group.items.flatMap { lines(for: $0, showTime: showTime) }
+            result.append("")
         }
-        return lines
+        return result
     }
 
     private static func chronologically(_ lhs: TodoItem, _ rhs: TodoItem) -> Bool {
         (lhs.completedAt ?? lhs.createdAt) < (rhs.completedAt ?? rhs.createdAt)
     }
 
-    private static func line(for item: TodoItem, showTime: Bool) -> String {
+    /// La tarea y, debajo, sus notas sangradas.
+    ///
+    /// Las notas van al export porque son justo el detalle que uno no recuerda
+    /// al final del dia, y son lo que hace util el resumen. Una nota de varias
+    /// lineas se sangra entera para que siga siendo el mismo punto de la lista.
+    private static func lines(for item: TodoItem, showTime: Bool) -> [String] {
         let box = item.isDone ? "[x]" : "[ ]"
         let time = showTime
             ? item.completedAt.map { " — \(timeFormatter.string(from: $0))" } ?? ""
             : ""
-        return "- \(box) \(item.title)\(time)"
+        var result = ["- \(box) \(item.title)\(time)"]
+
+        let notes = (item.notes ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !notes.isEmpty {
+            result += notes.split(separator: "\n", omittingEmptySubsequences: false)
+                .map { "  \($0)" }
+        }
+        return result
     }
 
     /// Locale fijo en ingles: el export es siempre en ingles, asi que no

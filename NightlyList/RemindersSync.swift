@@ -144,10 +144,7 @@ final class RemindersSync: ObservableObject {
             let predicate = eventStore.predicateForReminders(in: enabledCalendars())
             let reminders = try await fetchReminders(matching: predicate)
             
-            // 3. Obtener todas las tareas locales
-            let localItems = TaskStore.shared.items
-            
-            // 4. Crear mapas para comparacion rapida. uniquingKeysWith y no
+            // 3. Crear mapas para comparacion rapida. uniquingKeysWith y no
             // uniqueKeysWithValues: con dos claves iguales lo segundo aborta
             // el proceso.
             let remindersByID = Dictionary(
@@ -155,8 +152,8 @@ final class RemindersSync: ObservableObject {
                 uniquingKeysWith: { first, _ in first }
             )
             
-            // 5. Sincronizar en ambas direcciones
-            try await syncLocalToReminders(localItems, remindersByID: remindersByID)
+            // 4. Sincronizar en ambas direcciones
+            try await syncLocalToReminders(remindersByID: remindersByID)
 
             // El mapa se calcula aqui y no antes: syncLocalToReminders puede
             // haber enlazado tareas locales con recordatorios ya existentes.
@@ -169,7 +166,7 @@ final class RemindersSync: ObservableObject {
             )
             try await syncRemindersToLocal(reminders, localItemsByReminderID: localItemsByReminderID)
             
-            // 6. Actualizar estado
+            // 5. Actualizar estado
             DiagnosticLog.shared.log(
                 .sync,
                 "Synced \(TaskStore.shared.items.count) tasks against \(reminders.count) reminders in \(lists.count) lists"
@@ -198,12 +195,15 @@ final class RemindersSync: ObservableObject {
     }
     
     /// Sube tareas locales a Recordatorios (crea nuevas o actualiza existentes).
-    private func syncLocalToReminders(
-        _ localItems: [TodoItem],
-        remindersByID: [String: EKReminder]
-    ) async throws {
+    private func syncLocalToReminders(remindersByID: [String: EKReminder]) async throws {
         // Recordatorios que todavia no tiene ninguna tarea local, indexados
         // por lista y titulo: son los candidatos a adoptar en vez de duplicar.
+        // Primero lo que los recordatorios saben y las tareas no, de una sola
+        // vez. Item a item seria una escritura del fichero entero por tarea, y
+        // en la primera sincronizacion tras actualizar cambian todas.
+        adoptRemoteMetadata(from: remindersByID)
+        let localItems = TaskStore.shared.items
+
         let claimedIDs = Set(localItems.compactMap(\.reminderIdentifier))
         var unclaimedByKey: [String: EKReminder] = [:]
         for reminder in remindersByID.values
@@ -222,9 +222,9 @@ final class RemindersSync: ObservableObject {
                 // La lista se reconcilia siempre, no solo cuando hay cambios
                 // que subir: si no, las tareas sincronizadas antes de que
                 // existieran las listas se quedaban sin ella para siempre.
-                adoptList(of: existingReminder, forItemWithID: item.id)
-
-                // Actualizar recordatorio existente si la tarea local es mas reciente
+                // Actualizar recordatorio existente si la tarea local es mas
+                // reciente. La lista y los campos que faltaban ya los adopto
+                // la pasada de arriba.
                 if shouldUpdateReminder(existingReminder, with: item) {
                     try updateReminder(existingReminder, from: item)
                 }
@@ -315,6 +315,12 @@ final class RemindersSync: ObservableObject {
                 survivor.dueDate = item.dueDate
                 survivor.lastModified = item.lastModified
             }
+            // Lo que la superviviente no sepa, se lo lleva de la otra: fundir
+            // dos tareas no puede costar una nota.
+            survivor.notes = survivor.notes ?? item.notes
+            survivor.priorityValue = survivor.priorityValue ?? item.priorityValue
+            survivor.urlString = survivor.urlString ?? item.urlString
+            survivor.recurrenceSummary = survivor.recurrenceSummary ?? item.recurrenceSummary
             survivor.reminderIdentifier = survivor.reminderIdentifier ?? item.reminderIdentifier
             survivor.listIdentifier = survivor.listIdentifier ?? item.listIdentifier
             survivor.listTitle = survivor.listTitle ?? item.listTitle
@@ -422,6 +428,7 @@ final class RemindersSync: ObservableObject {
         let reminder = EKReminder(eventStore: eventStore)
         reminder.title = item.title
         reminder.calendar = calendar(withID: item.listIdentifier) ?? defaultCalendar()
+        applyDetails(of: item, to: reminder)
         // completionDate manda: asignarla ya deja isCompleted en true, y
         // conserva el "cuando" en vez de solo el "si".
         reminder.completionDate = item.completedAt
@@ -448,6 +455,7 @@ final class RemindersSync: ObservableObject {
     func updateReminder(_ reminder: EKReminder, from item: TodoItem) throws {
         reminder.title = item.title
         reminder.completionDate = item.completedAt
+        applyDetails(of: item, to: reminder)
         
         if let dueDate = item.dueDate {
             let components = Calendar.current.dateComponents(
@@ -497,7 +505,8 @@ final class RemindersSync: ObservableObject {
         
         item.reminderIdentifier = reminder.calendarItemIdentifier
         item.lastModified = reminder.lastModifiedDate ?? Date()
-        
+        Self.readDetails(of: reminder, into: &item)
+
         TaskStore.shared.items.append(item)
     }
     
@@ -521,7 +530,8 @@ final class RemindersSync: ObservableObject {
         }
         
         item.lastModified = reminder.lastModifiedDate ?? Date()
-        
+        Self.readDetails(of: reminder, into: &item)
+
         TaskStore.shared.items[index] = item
     }
     
@@ -558,6 +568,94 @@ final class RemindersSync: ObservableObject {
     
     // MARK: - Helpers
     
+    // MARK: - Notas, prioridad, URL y repeticion
+
+    /// Escribe en el recordatorio los campos que la tarea conoce.
+    ///
+    /// Un campo a nil no se toca. La tarea que lo tiene a nil no es que lo
+    /// quiera vacio: es que nunca supo de el, porque se creo con una version
+    /// de la app anterior a estos campos. Escribirlo borraria una nota que el
+    /// usuario si escribio, y esta app existe para no perder ese registro.
+    /// Para vaciarlos de verdad se guarda la cadena vacia, o el 0 en la
+    /// prioridad.
+    ///
+    /// Las reglas de repeticion no se tocan nunca: esta app no las edita, y
+    /// EventKit las quita si le escribes una lista vacia.
+    private func applyDetails(of item: TodoItem, to reminder: EKReminder) {
+        if let notes = item.notes {
+            reminder.notes = notes.isEmpty ? nil : notes
+        }
+
+        if let priorityValue = item.priorityValue {
+            reminder.priority = priorityValue
+        }
+
+        if let urlString = item.urlString {
+            let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+            reminder.url = trimmed.isEmpty ? nil : URL(string: trimmed)
+        }
+    }
+
+    /// Copia a la tarea los campos del recordatorio. Lo que diga Recordatorios
+    /// manda, porque a este punto solo se llega cuando el recordatorio es el
+    /// mas reciente de los dos.
+    static func readDetails(of reminder: EKReminder, into item: inout TodoItem) {
+        item.notes = reminder.notes ?? ""
+        item.priorityValue = reminder.priority
+        item.urlString = reminder.url?.absoluteString ?? ""
+        item.recurrenceSummary = recurrenceSummary(of: reminder)
+    }
+
+    /// Rellena solo los campos que la tarea no conoce, sin pisar los que si.
+    ///
+    /// Es lo que hace que una tarea creada antes de que existieran estos
+    /// campos acabe enterandose de sus notas, aunque sea ella la mas reciente
+    /// y por tanto la que manda en todo lo demas.
+    static func adoptUnknownDetails(of reminder: EKReminder, into item: inout TodoItem) -> Bool {
+        var changed = false
+
+        if item.notes == nil {
+            item.notes = reminder.notes ?? ""
+            changed = true
+        }
+        if item.priorityValue == nil {
+            item.priorityValue = reminder.priority
+            changed = true
+        }
+        if item.urlString == nil {
+            item.urlString = reminder.url?.absoluteString ?? ""
+            changed = true
+        }
+
+        // La repeticion es siempre del recordatorio: aqui no se edita.
+        let summary = recurrenceSummary(of: reminder)
+        if item.recurrenceSummary != summary {
+            item.recurrenceSummary = summary
+            changed = true
+        }
+
+        return changed
+    }
+
+    /// Como se repite, en una linea. nil si no se repite.
+    static func recurrenceSummary(of reminder: EKReminder) -> String? {
+        guard let rule = reminder.recurrenceRules?.first else { return nil }
+        return summary(of: rule)
+    }
+
+    static func summary(of rule: EKRecurrenceRule) -> String {
+        let interval = max(rule.interval, 1)
+        let unit: String
+        switch rule.frequency {
+        case .daily: unit = interval == 1 ? "day" : "days"
+        case .weekly: unit = interval == 1 ? "week" : "weeks"
+        case .monthly: unit = interval == 1 ? "month" : "months"
+        case .yearly: unit = interval == 1 ? "year" : "years"
+        @unknown default: unit = interval == 1 ? "time" : "times"
+        }
+        return interval == 1 ? "Every \(unit)" : "Every \(interval) \(unit)"
+    }
+
     /// Recordatorios puede marcar una tarea como completada sin dejar fecha.
     /// En ese caso hay que inventar una o la tarea quedaria como pendiente.
     private static func completionDate(of reminder: EKReminder) -> Date? {
@@ -642,20 +740,36 @@ final class RemindersSync: ObservableObject {
         }
     }
 
-    /// Copia a la tarea la lista en la que vive su recordatorio. El
-    /// recordatorio manda: si se movio desde esta app, move() ya lo empujo
-    /// antes, y si se movio desde la app Recordatorios, esto lo recoge.
-    private func adoptList(of reminder: EKReminder, forItemWithID id: TodoItem.ID) {
-        guard let index = TaskStore.shared.items.firstIndex(where: { $0.id == id }) else { return }
+    /// Copia a cada tarea la lista en la que vive su recordatorio, y de paso
+    /// los campos que ella todavia no conoce.
+    ///
+    /// El recordatorio manda en la lista: si se movio desde esta app, move()
+    /// ya lo empujo antes, y si se movio desde la app Recordatorios, esto lo
+    /// recoge. Escribe una sola vez al final: cada asignacion a
+    /// TaskStore.items guarda el fichero entero y dispara otra pasada.
+    private func adoptRemoteMetadata(from remindersByID: [String: EKReminder]) {
+        var items = TaskStore.shared.items
+        var changed = false
 
-        let listID = reminder.calendar?.calendarIdentifier
-        let listTitle = reminder.calendar?.title
-        var item = TaskStore.shared.items[index]
-        guard item.listIdentifier != listID || item.listTitle != listTitle else { return }
+        for index in items.indices {
+            guard let reminderID = items[index].reminderIdentifier,
+                  let reminder = remindersByID[reminderID] else { continue }
 
-        item.listIdentifier = listID
-        item.listTitle = listTitle
-        TaskStore.shared.items[index] = item
+            if Self.adoptUnknownDetails(of: reminder, into: &items[index]) {
+                changed = true
+            }
+
+            let listID = reminder.calendar?.calendarIdentifier
+            let listTitle = reminder.calendar?.title
+            if items[index].listIdentifier != listID || items[index].listTitle != listTitle {
+                items[index].listIdentifier = listID
+                items[index].listTitle = listTitle
+                changed = true
+            }
+        }
+
+        guard changed else { return }
+        TaskStore.shared.items = items
     }
 
     private func calendar(withID identifier: String?) -> EKCalendar? {

@@ -177,6 +177,30 @@ final class TaskStore: ObservableObject {
         }
     }
 
+    /// La tarea con ese id, este activa o archivada.
+    func item(id: TodoItem.ID) -> TodoItem? {
+        items.first { $0.id == id } ?? archived.first { $0.id == id }
+    }
+
+    /// Aplica un cambio a la tarea con ese id y le pone fecha de modificacion,
+    /// que es lo que hace que gane al resolver conflictos con Recordatorios.
+    ///
+    /// Una tarea archivada se puede editar igual, pero ese cambio no sube a
+    /// Recordatorios: solo el didSet de items dispara la sincronizacion.
+    func update(id: TodoItem.ID, _ change: (inout TodoItem) -> Void) {
+        if let index = items.firstIndex(where: { $0.id == id }) {
+            change(&items[index])
+            items[index].lastModified = Date()
+        } else if let index = archived.firstIndex(where: { $0.id == id }) {
+            change(&archived[index])
+            archived[index].lastModified = Date()
+        }
+    }
+
+    func setPriority(_ priority: TaskPriority, id: TodoItem.ID) {
+        update(id: id) { $0.priority = priority }
+    }
+
     /// Borra por id. Si la tarea sigue activa pasa por remove, que deja
     /// deshacer; si ya estaba archivada se quita del archivo.
     func delete(id: TodoItem.ID) {

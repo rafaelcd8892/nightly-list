@@ -5,7 +5,9 @@ import Foundation
 struct TaskFile: Codable, Equatable {
     /// 2: isDone paso a completedAt, y las tareas archivadas viven aparte.
     /// 3: cada tarea recuerda a que lista pertenece.
-    static let currentVersion = 3
+    /// 4: notas, prioridad, URL y repeticion, que antes se perdian al
+    ///    sincronizar con Recordatorios.
+    static let currentVersion = 4
 
     var version: Int
     var items: [TodoItem]

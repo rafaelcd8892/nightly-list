@@ -250,4 +250,40 @@ extension DayReportTests {
         let tarde = try! XCTUnwrap(markdown.range(of: "Tarde"))
         XCTAssertTrue(temprano.lowerBound < tarde.lowerBound, "el export")
     }
+
+    // MARK: - Notas en el export
+
+    func testMarkdownIndentsTheNotesUnderTheirTask() {
+        var item = TodoItem(title: "Arreglar el login")
+        item.completedAt = Date()
+        item.notes = "Era el refresh del token"
+
+        let markdown = DayReport(items: [item]).markdown(prompt: "")
+
+        XCTAssertTrue(markdown.contains("- [x] Arreglar el login"))
+        XCTAssertTrue(
+            markdown.contains("\n  Era el refresh del token"),
+            "la nota va sangrada para seguir siendo el mismo punto de la lista"
+        )
+    }
+
+    func testMarkdownKeepsMultiLineNotesTogether() {
+        var item = TodoItem(title: "Arreglar el login")
+        item.completedAt = Date()
+        item.notes = "Primera\nSegunda"
+
+        let markdown = DayReport(items: [item]).markdown(prompt: "")
+
+        XCTAssertTrue(markdown.contains("  Primera\n  Segunda"))
+    }
+
+    func testMarkdownIgnoresBlankNotes() {
+        var item = TodoItem(title: "Arreglar el login")
+        item.completedAt = Date()
+        item.notes = "   "
+
+        let markdown = DayReport(items: [item]).markdown(prompt: "")
+
+        XCTAssertFalse(markdown.contains("- [x] Arreglar el login\n  "))
+    }
 }

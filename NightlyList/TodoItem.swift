@@ -31,6 +31,31 @@ struct TodoItem: Identifiable, Codable, Equatable {
     /// Nil si esta tarea no se ha sincronizado con Recordatorios.
     var reminderIdentifier: String?
 
+    /// Las notas del recordatorio. Hasta ahora la sincronizacion las tiraba
+    /// sin decir nada: se escribian en Recordatorios y desaparecian.
+    ///
+    /// nil no es lo mismo que vacio. nil significa "esta tarea no sabe nada de
+    /// sus notas", y entonces la sincronizacion no las toca; la cadena vacia
+    /// significa "el usuario las borro", y esa si se propaga. Sin esa
+    /// distincion, la primera sincronizacion despues de actualizar borraria
+    /// las notas de todos los recordatorios que ya existian.
+    var notes: String?
+
+    /// La prioridad cruda de EKReminder: 0 ninguna, 1-4 alta, 5 media, 6-9
+    /// baja. Se guarda el entero y no el escalon para devolver el mismo numero
+    /// que trajo el recordatorio. nil se lee igual que en notes: sin opinion.
+    var priorityValue: Int?
+
+    /// La URL del recordatorio, como texto. Se guarda en crudo para poder
+    /// distinguir "sin opinion" (nil) de "el usuario la borro" (cadena vacia),
+    /// que con un URL? no se puede.
+    var urlString: String?
+
+    /// Como se repite el recordatorio, en una linea y solo para leer. Esta app
+    /// no edita repeticiones: las reglas de EventKit se quedan intactas y esto
+    /// es la etiqueta que se pinta para que se vea que las hay.
+    var recurrenceSummary: String?
+
     /// Timestamp de la ultima modificacion. Se usa para resolver conflictos
     /// en la sincronizacion bidireccional.
     var lastModified: Date = Date()
@@ -52,6 +77,29 @@ struct TodoItem: Identifiable, Codable, Equatable {
     var isSyncedWithReminders: Bool {
         reminderIdentifier != nil
     }
+
+    /// El escalon de prioridad, para la interfaz. Escribirlo deja el entero
+    /// canonico del escalon.
+    var priority: TaskPriority {
+        get { TaskPriority(rawPriority: priorityValue ?? 0) }
+        set { priorityValue = newValue.rawValue }
+    }
+
+    var hasNotes: Bool {
+        !(notes ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var url: URL? {
+        get {
+            let text = (urlString ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+            return URL(string: text)
+        }
+        // Vacio en vez de nil: borrar la URL tiene que viajar a Recordatorios.
+        set { urlString = newValue?.absoluteString ?? "" }
+    }
+
+    var isRecurring: Bool { recurrenceSummary != nil }
 }
 
 // MARK: - Lectura de ficheros anteriores
@@ -61,6 +109,7 @@ extension TodoItem {
         case id, title, createdAt, completedAt, archivedAt, dueDate
         case listIdentifier, listTitle
         case reminderIdentifier, lastModified
+        case notes, priorityValue, urlString, recurrenceSummary
         /// Solo se lee, nunca se escribe: es el campo de la version 1.
         case isDone
     }
@@ -80,6 +129,10 @@ extension TodoItem {
         listIdentifier = try container.decodeIfPresent(String.self, forKey: .listIdentifier)
         listTitle = try container.decodeIfPresent(String.self, forKey: .listTitle)
         archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        priorityValue = try container.decodeIfPresent(Int.self, forKey: .priorityValue)
+        urlString = try container.decodeIfPresent(String.self, forKey: .urlString)
+        recurrenceSummary = try container.decodeIfPresent(String.self, forKey: .recurrenceSummary)
 
         let modified = try container.decodeIfPresent(Date.self, forKey: .lastModified) ?? Date()
         lastModified = modified
@@ -105,6 +158,10 @@ extension TodoItem {
         try container.encodeIfPresent(listIdentifier, forKey: .listIdentifier)
         try container.encodeIfPresent(listTitle, forKey: .listTitle)
         try container.encodeIfPresent(reminderIdentifier, forKey: .reminderIdentifier)
+        try container.encodeIfPresent(notes, forKey: .notes)
+        try container.encodeIfPresent(priorityValue, forKey: .priorityValue)
+        try container.encodeIfPresent(urlString, forKey: .urlString)
+        try container.encodeIfPresent(recurrenceSummary, forKey: .recurrenceSummary)
         try container.encode(lastModified, forKey: .lastModified)
     }
 }

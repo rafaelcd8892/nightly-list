@@ -130,6 +130,8 @@ struct MainWindowView: View {
                         .strikethrough()
                         .foregroundStyle(.secondary)
 
+                    TaskBadges(item: item)
+
                     Spacer()
 
                     if let completedAt = item.completedAt {
@@ -139,6 +141,12 @@ struct MainWindowView: View {
                     }
                 }
                 .padding(.vertical, 2)
+                .contextMenu {
+                    Button("Details…") { TaskDetailsWindowController.shared.show(item.id) }
+                    if let url = item.url {
+                        Button("Open link") { NSWorkspace.shared.open(url) }
+                    }
+                }
             }
         }
         .searchable(text: $search, placement: .toolbar, prompt: "Search completed")

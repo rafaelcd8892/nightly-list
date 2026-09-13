@@ -467,6 +467,8 @@ private struct DayReportView: View {
                     .onTapGesture(count: 2) { startRename(item) }
             }
 
+            TaskBadges(item: item)
+
             Spacer()
 
             if let time, renamingID != item.id {
@@ -478,7 +480,24 @@ private struct DayReportView: View {
         .contextMenu {
             Button("Rename") { startRename(item) }
             Button(done ? "Mark as open" : "Mark as done") { onToggle(item.id) }
+
             Divider()
+
+            Menu("Priority") {
+                ForEach(TaskPriority.allCases) { level in
+                    Button(level.menuTitle) { TaskStore.shared.setPriority(level, id: item.id) }
+                        .disabled(level == item.priority)
+                }
+            }
+
+            Button("Details…") { TaskDetailsWindowController.shared.show(item.id) }
+
+            if let url = item.url {
+                Button("Open link") { NSWorkspace.shared.open(url) }
+            }
+
+            Divider()
+
             Button("Delete", role: .destructive) { onDelete(item.id) }
         }
     }
