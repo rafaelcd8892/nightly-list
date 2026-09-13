@@ -16,8 +16,15 @@ enum SummaryPrompt {
 
     /// El guardado si hay uno util, y si no el de fabrica. Un prompt en
     /// blanco no cuenta: dejaria el export sin instrucciones.
+    /// Los tests corren hospedados en la app y comparten sus preferencias: sin
+    /// esto, un prompt que el usuario haya personalizado cambia el resultado de
+    /// las pruebas del export.
+    private static let isRunningTests =
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
     static var current: String {
-        guard let stored = UserDefaults.standard.string(forKey: key),
+        guard !isRunningTests,
+              let stored = UserDefaults.standard.string(forKey: key),
               !stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return defaultText }
         return stored

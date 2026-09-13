@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import Carbon.HIToolbox
 import UserNotifications
 
 @main
@@ -37,11 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         statusItem = StatusItemController(store: .shared)
 
-        // Option+Espacio abre la captura rapida.
-        HotKeyCenter.shared.register(
-            keyCode: UInt32(kVK_Space),
-            modifiers: UInt32(optionKey)
-        ) { [quickAdd] in
+        QuickCaptureHotKey.shared.start { [quickAdd] in
             quickAdd.toggle()
         }
     }

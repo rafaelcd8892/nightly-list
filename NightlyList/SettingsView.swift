@@ -61,7 +61,10 @@ struct SettingsView: View {
 
 private struct GeneralSettingsTab: View {
     @StateObject private var loginItem = LoginItem()
+    @StateObject private var hotKey = QuickCaptureHotKey.shared
     @State private var loginError: String?
+    @State private var shortcut = QuickCaptureShortcut.current
+    @State private var recording = false
 
     var body: some View {
         Form {
@@ -82,8 +85,49 @@ private struct GeneralSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Shortcut") {
-                LabeledContent("Quick capture", value: "⌥ Space")
+            Section {
+                LabeledContent("Quick capture") {
+                    HStack(spacing: 8) {
+                        if recording {
+                            Text("Press a combination…")
+                                .foregroundStyle(.secondary)
+                            ShortcutRecorder { capturado in
+                                QuickCaptureShortcut.save(capturado)
+                                shortcut = capturado
+                                recording = false
+                                hotKey.apply()
+                            }
+                            .frame(width: 1, height: 1)
+                        } else {
+                            Text(shortcut.display)
+                                .font(.system(.body, design: .monospaced))
+                        }
+
+                        Button(recording ? "Cancel" : "Change") {
+                            recording.toggle()
+                        }
+
+                        Button("Reset") {
+                            QuickCaptureShortcut.reset()
+                            shortcut = QuickCaptureShortcut.current
+                            recording = false
+                            hotKey.apply()
+                        }
+                        .disabled(shortcut == QuickCaptureShortcut.fallback)
+                    }
+                }
+
+                if hotKey.isTaken {
+                    Text("Another app already uses \(shortcut.display). Pick a different one.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            } header: {
+                Text("Shortcut")
+            } footer: {
+                Text("Opens the quick capture panel from anywhere. Enter saves the task; ⌘↩ records something you already finished.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

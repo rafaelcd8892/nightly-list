@@ -42,6 +42,16 @@ final class HotKeyCenter {
         return true
     }
 
+    /// Suelta todos los atajos. Hace falta para poder cambiarlos: registrar
+    /// uno nuevo sin soltar el anterior deja los dos activos.
+    func unregisterAll() {
+        for reference in references.values {
+            UnregisterEventHotKey(reference)
+        }
+        references.removeAll()
+        actions.removeAll()
+    }
+
     fileprivate func fire(_ id: UInt32) {
         actions[id]?()
     }

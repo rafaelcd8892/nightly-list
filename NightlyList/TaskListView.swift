@@ -333,6 +333,10 @@ private struct DayReportView: View {
             // abierto, para no dejar el "Copiado" pegado para siempre.
             .onChange(of: report.day) { _, _ in copied = false }
         }
+        .onDisappear {
+            commitRename()
+            renamingID = nil
+        }
     }
 
     private var sections: some View {
@@ -445,6 +449,12 @@ private struct DayReportView: View {
                     .focused($renameFocused)
                     .onSubmit(commitRename)
                     .onExitCommand { renamingID = nil }
+                    // Clic fuera: se guarda y se sale, como en Finder. Sin
+                    // esto el modo renombrar solo se cerraba con Enter, y se
+                    // quedaba puesto aunque la fila desapareciera.
+                    .onChange(of: renameFocused) { _, enfocado in
+                        if !enfocado { commitRename() }
+                    }
             } else {
                 Text(item.title)
                     .strikethrough(done)
