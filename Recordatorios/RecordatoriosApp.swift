@@ -21,6 +21,10 @@ struct RecordatoriosApp: App {
             Image(nsImage: Self.statusImage(pending: store.pendingCount))
         }
         .menuBarExtraStyle(.window)
+
+        Settings {
+            SettingsView()
+        }
     }
 
     /// MenuBarExtra solo respeta un Text o un Image como label: un HStack se
@@ -53,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
+        DiagnosticLog.shared.log(.app, "Arranque")
 
         // Option+Espacio abre la captura rapida.
         HotKeyCenter.shared.register(

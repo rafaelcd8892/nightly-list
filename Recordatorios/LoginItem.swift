@@ -24,8 +24,12 @@ final class LoginItem: ObservableObject {
             } else {
                 try SMAppService.mainApp.unregister()
             }
+            DiagnosticLog.shared.log(.login, enabled
+                ? "Registrado para abrir al iniciar sesion"
+                : "Ya no abre al iniciar sesion")
             return nil
         } catch {
+            DiagnosticLog.shared.log(.login, "Fallo al cambiarlo: \(error.localizedDescription)")
             return error.localizedDescription
         }
     }

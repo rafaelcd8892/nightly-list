@@ -2,10 +2,7 @@ import SwiftUI
 
 struct TaskListView: View {
     @ObservedObject var store: TaskStore
-    @StateObject private var loginItem = LoginItem()
-    @StateObject private var remindersSync = RemindersSync.shared
     @State private var newTitle = ""
-    @State private var loginError: String?
     /// Tarea cuyo selector de fecha esta abierto, si hay alguno.
     @State private var editingDateFor: TodoItem.ID?
     @State private var notificationsDenied = false
@@ -67,68 +64,28 @@ struct TaskListView: View {
                 }
                 Button("Limpiar hechas") { store.clearDone() }
                     .font(.caption)
+                SettingsLink {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+                .help("Ajustes")
+                // Una app LSUIElement no se pone delante sola: sin esto la
+                // ventana de Ajustes se abre detras de todo.
+                .simultaneousGesture(TapGesture().onEnded {
+                    NSApp.activate(ignoringOtherApps: true)
+                })
+
                 Button("Salir") { NSApplication.shared.terminate(nil) }
                     .font(.caption)
                     .keyboardShortcut("q")
             }
 
-            Toggle("Abrir al iniciar sesión", isOn: Binding(
-                get: { loginItem.isEnabled },
-                set: { loginError = loginItem.setEnabled($0) }
-            ))
-            .toggleStyle(.checkbox)
-            .font(.caption)
-
-            if let loginError {
-                Text(loginError)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            // Sincronizacion con la app Recordatorios
-            Divider()
-            
-            Toggle("Sincronizar con Recordatorios", isOn: Binding(
-                get: { remindersSync.isSyncEnabled },
-                set: { enableSync($0) }
-            ))
-            .toggleStyle(.checkbox)
-            .font(.caption)
-            
-            if remindersSync.isSyncEnabled {
-                HStack(spacing: 4) {
-                    if let lastSync = remindersSync.lastSyncDate {
-                        Text("Última sync: \(lastSync, style: .relative)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        Task { await remindersSync.performFullSync() }
-                    }) {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Sincronizar ahora")
-                }
-            }
-            
-            if let syncError = remindersSync.lastSyncError {
-                Text(syncError)
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .padding(12)
         // 360 y no 320: con el boton Deshacer visible, el footer truncaba
         // "Limpiar hechas" a "Limpiar h...".
         .frame(width: 360)
-        .onAppear { loginItem.refresh() }
     }
 
     private var taskRows: some View {
@@ -171,22 +128,6 @@ private extension TaskListView {
     func add() {
         store.add(newTitle)
         newTitle = ""
-    }
-    
-    func enableSync(_ enabled: Bool) {
-        if enabled {
-            Task {
-                let granted = await remindersSync.requestAuthorization()
-                if granted {
-                    remindersSync.isSyncEnabled = true
-                    await remindersSync.performFullSync()
-                } else {
-                    remindersSync.isSyncEnabled = false
-                }
-            }
-        } else {
-            remindersSync.isSyncEnabled = false
-        }
     }
 }
 
@@ -282,6 +223,36 @@ private struct TaskRow: View {
                 }
                 .padding(.leading, 24)
             }
+        }
+        .contextMenu {
+            Button("Renombrar") { startEditingTitle() }
+
+            Button(item.isDone ? "Marcar como pendiente" : "Marcar como hecha") {
+                item.isDone.toggle()
+                item.lastModified = Date()
+            }
+
+            Divider()
+
+            Button(item.dueDate == nil ? "Poner recordatorio…" : "Cambiar recordatorio…") {
+                onToggleDateEditor()
+            }
+
+            if item.dueDate != nil {
+                Button("Quitar recordatorio") {
+                    item.dueDate = nil
+                    item.lastModified = Date()
+                }
+            }
+
+            Divider()
+
+            Button("Copiar título") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(item.title, forType: .string)
+            }
+
+            Button("Borrar", role: .destructive, action: onDelete)
         }
     }
 

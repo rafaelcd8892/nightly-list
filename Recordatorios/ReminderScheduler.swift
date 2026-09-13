@@ -40,6 +40,7 @@ final class ReminderScheduler {
         let stale = pending.map(\.identifier).filter { !wantedIDs.contains($0) }
         if !stale.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: stale)
+            DiagnosticLog.shared.log(.notifications, "Retirados \(stale.count) avisos que ya no tocan")
         }
 
         for item in wanted {
@@ -60,7 +61,14 @@ final class ReminderScheduler {
                 content: content,
                 trigger: UNCalendarNotificationTrigger(dateMatching: fields, repeats: false)
             )
-            try? await center.add(request)
+            do {
+                try await center.add(request)
+            } catch {
+                DiagnosticLog.shared.log(
+                    .notifications,
+                    "No se pudo programar \"\(item.title)\": \(error.localizedDescription)"
+                )
+            }
         }
 
     }

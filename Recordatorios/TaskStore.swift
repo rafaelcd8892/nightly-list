@@ -122,6 +122,7 @@ final class TaskStore: ObservableObject {
             storageError = nil
         } catch {
             storageError = "No se pudieron guardar las tareas: \(error.localizedDescription)"
+            DiagnosticLog.shared.log(.storage, "Fallo al guardar: \(error.localizedDescription)")
         }
     }
 
@@ -131,17 +132,18 @@ final class TaskStore: ObservableObject {
             return
         }
         do {
-            try storage.migrateLegacyDefaults(
-                from: .standard,
-                key: Self.legacyDefaultsKey
-            )
+            if try storage.migrateLegacyDefaults(from: .standard, key: Self.legacyDefaultsKey) {
+                DiagnosticLog.shared.log(.storage, "Migradas las tareas de UserDefaults al fichero")
+            }
             let loaded = try storage.load()
             // Asignar aunque venga vacio dispararia el didSet y reescribiria el
             // fichero en cada arranque; solo interesa cuando hay algo.
             if !loaded.isEmpty { items = loaded }
             storageError = nil
+            DiagnosticLog.shared.log(.storage, "Cargadas \(loaded.count) tareas")
         } catch {
             storageError = "No se pudieron leer las tareas: \(error.localizedDescription)"
+            DiagnosticLog.shared.log(.storage, "Fallo al leer: \(error.localizedDescription)")
         }
     }
 }

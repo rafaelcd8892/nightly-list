@@ -153,12 +153,17 @@ final class RemindersSync: ObservableObject {
             try await syncRemindersToLocal(reminders, localItemsByReminderID: localItemsByReminderID)
             
             // 6. Actualizar estado
+            DiagnosticLog.shared.log(
+                .sync,
+                "Sincronizadas \(TaskStore.shared.items.count) tareas con \(reminders.count) recordatorios"
+            )
             lastSyncError = nil
             lastSyncDate = Date()
             UserDefaults.standard.set(lastSyncDate, forKey: lastSyncKey)
             
         } catch {
             lastSyncError = "Error en sincronización: \(error.localizedDescription)"
+            DiagnosticLog.shared.log(.sync, "Fallo: \(error.localizedDescription)")
         }
     }
     
@@ -265,6 +270,10 @@ final class RemindersSync: ObservableObject {
         }
 
         guard merged.count != TaskStore.shared.items.count else { return }
+        DiagnosticLog.shared.log(
+            .sync,
+            "Fundidos \(TaskStore.shared.items.count - merged.count) duplicados por titulo"
+        )
         TaskStore.shared.items = merged
     }
 
