@@ -148,3 +148,106 @@ extension DayReportTests {
         )
     }
 }
+
+extension DayReportTests {
+    // MARK: - Agrupacion por ticket
+
+    func testMarkdownGroupsCompletedByTicket() {
+        let report = DayReport(
+            day: today,
+            items: [
+                task("Fix login ABC-1", completed: today),
+                task("Review ABC-1 PR", completed: today),
+                task("Ship XYZ-9", completed: today),
+            ],
+            calendar: calendar
+        )
+
+        let markdown = report.markdown(prompt: "-")
+
+        XCTAssertTrue(markdown.contains("### ABC-1 (2)"))
+        XCTAssertTrue(markdown.contains("### XYZ-9 (1)"))
+    }
+
+    /// Sin referencias no se agrupa: un encabezado de grupo no aportaria nada.
+    func testMarkdownStaysFlatWithoutAnyTicket() {
+        let report = DayReport(
+            day: today,
+            items: [task("Regar las plantas", completed: today)],
+            calendar: calendar
+        )
+
+        let markdown = report.markdown(prompt: "-")
+
+        XCTAssertFalse(markdown.contains("###"))
+        XCTAssertTrue(markdown.contains("- [x] Regar las plantas"))
+    }
+
+    /// Mezcla: las que llevan referencia van agrupadas y el resto al final.
+    func testTasksWithoutATicketGoLastUnderTheirOwnHeading() {
+        let report = DayReport(
+            day: today,
+            items: [
+                task("Sin referencia", completed: today),
+                task("Con ABC-2", completed: today),
+            ],
+            calendar: calendar
+        )
+
+        let markdown = report.markdown(prompt: "-")
+        let ticketHeading = try! XCTUnwrap(markdown.range(of: "### ABC-2"))
+        let otherHeading = try! XCTUnwrap(markdown.range(of: "### No ticket"))
+
+        XCTAssertTrue(ticketHeading.lowerBound < otherHeading.lowerBound)
+    }
+
+    func testGroupedSortsTicketsAlphabeticallyAndPutsTheRestAtTheEnd() {
+        let groups = DayReport.grouped([
+            task("Sin nada"),
+            task("De XYZ-1"),
+            task("De ABC-1"),
+        ])
+
+        XCTAssertEqual(groups.map(\.reference), ["ABC-1", "XYZ-1", nil])
+    }
+
+    /// Un titulo con dos referencias cuenta una sola vez, bajo la primera.
+    func testATaskWithTwoReferencesIsNotCountedTwice() {
+        let groups = DayReport.grouped([task("Cierra ABC-1 y XYZ-2")])
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups.first?.reference, "ABC-1")
+    }
+
+    func testStillOpenSectionIsGroupedToo() {
+        let report = DayReport(
+            day: today,
+            items: [task("Pendiente de ABC-5")],
+            calendar: calendar
+        )
+
+        XCTAssertTrue(report.markdown(prompt: "-").contains("### ABC-5 (1)"))
+    }
+}
+
+extension DayReportTests {
+    /// La vista quiere lo ultimo arriba; el export cuenta el dia de principio
+    /// a fin.
+    func testExportListsCompletedChronologicallyEvenThoughTheViewIsReversed() {
+        let report = DayReport(
+            day: today,
+            items: [
+                task("Temprano", completed: today),
+                task("Tarde", completed: today.addingTimeInterval(3_600)),
+            ],
+            calendar: calendar
+        )
+
+        XCTAssertEqual(report.completed.map(\.title), ["Tarde", "Temprano"], "la vista")
+
+        let markdown = report.markdown(prompt: "-")
+        let temprano = try! XCTUnwrap(markdown.range(of: "Temprano"))
+        let tarde = try! XCTUnwrap(markdown.range(of: "Tarde"))
+        XCTAssertTrue(temprano.lowerBound < tarde.lowerBound, "el export")
+    }
+}

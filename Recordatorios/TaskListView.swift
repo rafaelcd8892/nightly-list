@@ -180,6 +180,10 @@ private struct TaskRow: View {
                 }
                 .buttonStyle(.plain)
 
+                if let reference = item.ticketReference {
+                    TicketChip(reference: reference)
+                }
+
                 VStack(alignment: .leading, spacing: 1) {
                     if let draftTitle {
                         TextField("", text: Binding(
@@ -403,6 +407,10 @@ private struct DayReportView: View {
             .buttonStyle(.plain)
             .help(done ? "Mark as open" : "Mark as done")
 
+            if let reference = item.ticketReference {
+                TicketChip(reference: reference)
+            }
+
             Text(item.title)
                 .strikethrough(done)
                 .foregroundStyle(done ? Color.secondary : Color.primary)
@@ -415,5 +423,23 @@ private struct DayReportView: View {
                     .foregroundStyle(.tertiary)
             }
         }
+    }
+}
+
+/// La referencia de ticket detectada en el titulo, en pequeño.
+///
+/// No se quita del titulo: el texto se queda como lo escribio el usuario y
+/// esto solo lo señala.
+private struct TicketChip: View {
+    let reference: String
+
+    var body: some View {
+        Text(reference)
+            .font(.system(.caption2, design: .monospaced))
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 3))
+            .foregroundStyle(.secondary)
+            .help("Detected project reference")
     }
 }
