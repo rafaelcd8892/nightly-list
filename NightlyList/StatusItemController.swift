@@ -21,6 +21,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
         popover.behavior = .transient
         popover.animates = false
+        popover.delegate = self
         popover.contentViewController = NSHostingController(rootView: TaskListView(store: store))
 
         if let button = statusItem.button {
@@ -36,6 +37,12 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.refreshImage() }
             .store(in: &cancellables)
+    }
+
+    /// @objc explicito: popoverDidClose es un metodo opcional de un protocolo
+    /// de ObjC, y sin la marca el runtime no lo encuentra.
+    @objc nonisolated func popoverDidClose(_ notification: Notification) {
+        Task { @MainActor in PopoverSession.shared.didClose() }
     }
 
     // MARK: - Clics

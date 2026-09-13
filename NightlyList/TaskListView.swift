@@ -284,6 +284,7 @@ private struct DayReportView: View {
     let onRename: (TodoItem.ID, String) -> Void
     let onDelete: (TodoItem.ID) -> Void
 
+    @ObservedObject private var session = PopoverSession.shared
     @State private var copied = false
     @State private var renamingID: TodoItem.ID?
     @State private var draftTitle = ""
@@ -333,10 +334,14 @@ private struct DayReportView: View {
             // abierto, para no dejar el "Copiado" pegado para siempre.
             .onChange(of: report.day) { _, _ in copied = false }
         }
-        .onDisappear {
-            commitRename()
-            renamingID = nil
-        }
+        // Un clic en cualquier hueco de la vista sale del renombrado: pinchar
+        // en un texto no le quita el foco al campo, porque un Text no es
+        // enfocable, asi que el foco por si solo no basta.
+        .contentShape(Rectangle())
+        .onTapGesture { commitRename() }
+        // Y al cerrarse el popover tambien. onDisappear no sirve: el popover
+        // no se destruye, se esconde.
+        .onChange(of: session.closeCount) { _, _ in commitRename() }
     }
 
     private var sections: some View {
@@ -403,10 +408,10 @@ private struct DayReportView: View {
     }
 
     private func commitRename() {
-        if let renamingID {
-            onRename(renamingID, draftTitle)
-        }
-        renamingID = nil
+        guard let renamingID else { return }
+        onRename(renamingID, draftTitle)
+        self.renamingID = nil
+        renameFocused = false
     }
 
     @ViewBuilder

@@ -5,6 +5,7 @@ import SwiftUI
 /// bindings de ForEach.
 struct TaskRow: View {
     @Binding var item: TodoItem
+    @ObservedObject private var session = PopoverSession.shared
     @State private var draftTitle: String?
     @FocusState private var titleFocused: Bool
     let isEditingDate: Bool
@@ -95,6 +96,9 @@ struct TaskRow: View {
                 .padding(.leading, 24)
             }
         }
+        // El popover se esconde en vez de destruirse, asi que una fila a medio
+        // renombrar sobrevivia a cerrarlo y volver a abrirlo.
+        .onChange(of: session.closeCount) { _, _ in commitTitle() }
         .contextMenu {
             Button("Rename") { startEditingTitle() }
 
