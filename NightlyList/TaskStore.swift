@@ -161,6 +161,39 @@ final class TaskStore: ObservableObject {
         DiagnosticLog.shared.log(.storage, "Archived \(removed.count) completed tasks")
     }
 
+    /// Renombra por id, este la tarea en la lista activa o en el archivo.
+    ///
+    /// Un titulo en blanco no se guarda: la tarea conserva el que tenia.
+    func rename(id: TodoItem.ID, to newTitle: String) {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if let index = items.firstIndex(where: { $0.id == id }) {
+            items[index].title = trimmed
+            items[index].lastModified = Date()
+        } else if let index = archived.firstIndex(where: { $0.id == id }) {
+            archived[index].title = trimmed
+            archived[index].lastModified = Date()
+        }
+    }
+
+    /// Borra por id. Si la tarea sigue activa pasa por remove, que deja
+    /// deshacer; si ya estaba archivada se quita del archivo.
+    func delete(id: TodoItem.ID) {
+        if let item = items.first(where: { $0.id == id }) {
+            remove(item)
+            return
+        }
+
+        guard let index = archived.firstIndex(where: { $0.id == id }) else { return }
+        let item = archived[index]
+        archived.remove(at: index)
+
+        if systemSyncEnabled {
+            Task { await RemindersSync.shared.deleteItem(item) }
+        }
+    }
+
     /// Retira de la lista activa lo completado hace mas de una semana.
     ///
     /// Archivar deja de ser un boton. Su unico efecto visible era mover una

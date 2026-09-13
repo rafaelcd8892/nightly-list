@@ -513,4 +513,68 @@ final class TaskStoreTests: XCTestCase {
 
         XCTAssertEqual(store.items.map(\.title), ["Pendiente antigua"])
     }
+
+    // MARK: - Renombrar y borrar por id
+
+    func testRenamingAnActiveTask() {
+        let store = makeStore()
+        store.add("Nombre viejo")
+
+        store.rename(id: store.items[0].id, to: "  Nombre nuevo  ")
+
+        XCTAssertEqual(store.items[0].title, "Nombre nuevo")
+    }
+
+    func testRenamingAnArchivedTask() {
+        let store = makeStore()
+        store.addCompleted("Archivame")
+        store.clearDone()
+        let id = try! XCTUnwrap(store.archived.first).id
+
+        store.rename(id: id, to: "Ya con otro nombre")
+
+        XCTAssertEqual(store.archived.first?.title, "Ya con otro nombre")
+    }
+
+    func testABlankRenameKeepsTheOldTitle() {
+        let store = makeStore()
+        store.add("Se queda")
+
+        store.rename(id: store.items[0].id, to: "   ")
+
+        XCTAssertEqual(store.items[0].title, "Se queda")
+    }
+
+    /// Borrar una activa sigue pasando por remove, asi que se puede deshacer.
+    func testDeletingAnActiveTaskCanBeUndone() {
+        let store = makeStore()
+        ["A", "B"].forEach(store.add)
+
+        store.delete(id: store.items[0].id)
+        XCTAssertEqual(store.items.map(\.title), ["B"])
+        XCTAssertTrue(store.canUndo)
+
+        store.undoRemoval()
+        XCTAssertEqual(store.items.map(\.title), ["A", "B"])
+    }
+
+    func testDeletingAnArchivedTaskTakesItOutOfTheArchive() {
+        let store = makeStore()
+        store.addCompleted("Archivame")
+        store.clearDone()
+        let id = try! XCTUnwrap(store.archived.first).id
+
+        store.delete(id: id)
+
+        XCTAssertTrue(store.archived.isEmpty)
+    }
+
+    func testDeletingAnUnknownIDChangesNothing() {
+        let store = makeStore()
+        store.add("A")
+
+        store.delete(id: UUID())
+
+        XCTAssertEqual(store.items.count, 1)
+    }
 }

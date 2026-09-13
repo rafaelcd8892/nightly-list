@@ -8,6 +8,13 @@ struct TaskListView: View {
     @State private var notificationsDenied = false
     // Today primero: lo que se abre a mirar es el dia, no el inventario.
     @State private var mode: Mode = .today
+    /// Compartido con la vista de Today: esconder la seccion tiene que poder
+    /// deshacerse desde el menu, o seria una puerta de un solo sentido.
+    @AppStorage("today.doneHiddenOn") private var doneHiddenOn = ""
+
+    private var doneHiddenToday: Bool {
+        doneHiddenOn == DayReportView.dayKey(Date())
+    }
     /// Lista por la que se filtra, o nil para todas.
     @State private var listFilter: TaskList?
     @StateObject private var sync = RemindersSync.shared
@@ -56,7 +63,9 @@ struct TaskListView: View {
                         archived: store.archived.filter(matchesList)
                     ),
                     maxVisibleRows: maxVisibleRows,
-                    onToggle: store.toggleCompletion(id:)
+                    onToggle: store.toggleCompletion(id:),
+                    onRename: store.rename(id:to:),
+                    onDelete: store.delete(id:)
                 )
             }
 
@@ -165,7 +174,10 @@ struct TaskListView: View {
 
             Button("Settings…") { SettingsWindowController.shared.show() }
 
-            Divider()
+            if doneHiddenToday {
+                Button("Show today's completed") { doneHiddenOn = "" }
+                Divider()
+            }
 
             Button("Quit") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
@@ -269,7 +281,21 @@ private struct DayReportView: View {
     /// tamaño al saltar de pestaña.
     let maxVisibleRows: Int
     let onToggle: (TodoItem.ID) -> Void
+    let onRename: (TodoItem.ID, String) -> Void
+    let onDelete: (TodoItem.ID) -> Void
+
     @State private var copied = false
+    @State private var renamingID: TodoItem.ID?
+    @State private var draftTitle = ""
+    @FocusState private var renameFocused: Bool
+
+    /// Plegada por defecto: el popover se abre para ver lo que queda, y el
+    /// numero del encabezado ya dice lo que se hizo.
+    @AppStorage("today.doneCollapsed") private var doneCollapsed = true
+
+    /// El dia en el que se pidio esconder la seccion. Al cambiar de dia vuelve
+    /// sola, para que esconderla no sea una puerta de un solo sentido.
+    @AppStorage("today.doneHiddenOn") private var doneHiddenOn = ""
 
     private var rowCount: Int { report.completed.count + report.created.count }
 
@@ -311,10 +337,14 @@ private struct DayReportView: View {
 
     private var sections: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !report.completed.isEmpty {
-                section("Done", count: report.completed.count) {
-                    ForEach(report.completed) { item in
-                        row(item, time: item.completedAt, done: true)
+            if !report.completed.isEmpty && !isDoneHidden {
+                VStack(alignment: .leading, spacing: 4) {
+                    doneHeader
+
+                    if !doneCollapsed {
+                        ForEach(report.completed) { item in
+                            row(item, time: item.completedAt, done: true)
+                        }
                     }
                 }
             }
@@ -328,6 +358,51 @@ private struct DayReportView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var isDoneHidden: Bool {
+        doneHiddenOn == Self.dayKey(report.day)
+    }
+
+    private var doneHeader: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.15)) { doneCollapsed.toggle() }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .rotationEffect(.degrees(doneCollapsed ? 0 : 90))
+                Text("Done · \(report.completed.count)")
+                    .font(.caption.weight(.semibold))
+                Spacer()
+            }
+            .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(doneCollapsed ? "Show what you finished today" : "Fold it away")
+        .contextMenu {
+            Button("Hide for today") { doneHiddenOn = Self.dayKey(report.day) }
+        }
+    }
+
+    /// Clave por dia, para que esconder la seccion caduque al dia siguiente.
+    static func dayKey(_ date: Date) -> String {
+        let partes = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return "\(partes.year ?? 0)-\(partes.month ?? 0)-\(partes.day ?? 0)"
+    }
+
+    private func startRename(_ item: TodoItem) {
+        draftTitle = item.title
+        renamingID = item.id
+        renameFocused = true
+    }
+
+    private func commitRename() {
+        if let renamingID {
+            onRename(renamingID, draftTitle)
+        }
+        renamingID = nil
     }
 
     @ViewBuilder
@@ -364,17 +439,32 @@ private struct DayReportView: View {
                 TicketChip(reference: reference)
             }
 
-            Text(item.title)
-                .strikethrough(done)
-                .foregroundStyle(done ? Color.secondary : Color.primary)
+            if renamingID == item.id {
+                TextField("", text: $draftTitle)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($renameFocused)
+                    .onSubmit(commitRename)
+                    .onExitCommand { renamingID = nil }
+            } else {
+                Text(item.title)
+                    .strikethrough(done)
+                    .foregroundStyle(done ? Color.secondary : Color.primary)
+                    .onTapGesture(count: 2) { startRename(item) }
+            }
 
             Spacer()
 
-            if let time {
+            if let time, renamingID != item.id {
                 Text(time, style: .time)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+        }
+        .contextMenu {
+            Button("Rename") { startRename(item) }
+            Button(done ? "Mark as open" : "Mark as done") { onToggle(item.id) }
+            Divider()
+            Button("Delete", role: .destructive) { onDelete(item.id) }
         }
     }
 }
