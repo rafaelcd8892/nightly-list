@@ -1,5 +1,5 @@
 import XCTest
-@testable import Recordatorios
+@testable import NightlyList
 
 final class DayReportTests: XCTestCase {
     /// Calendario fijo en UTC: si no, el test cambia de resultado segun donde

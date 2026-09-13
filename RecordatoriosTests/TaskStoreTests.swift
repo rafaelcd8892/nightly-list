@@ -1,5 +1,5 @@
 import XCTest
-@testable import Recordatorios
+@testable import NightlyList
 
 /// systemSyncEnabled va en false en todos los stores de prueba: si no, montar
 /// uno cancelaria las notificaciones reales del usuario y dispararia una

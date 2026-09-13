@@ -1,5 +1,5 @@
 import XCTest
-@testable import Recordatorios
+@testable import NightlyList
 
 final class TaskStorageTests: XCTestCase {
     private var directory: URL!

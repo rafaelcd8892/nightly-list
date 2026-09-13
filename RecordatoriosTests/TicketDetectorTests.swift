@@ -1,5 +1,5 @@
 import XCTest
-@testable import Recordatorios
+@testable import NightlyList
 
 final class TicketDetectorTests: XCTestCase {
     // MARK: - Lo que si es un ticket
