@@ -80,8 +80,10 @@ struct TaskListView: View {
                         .font(.caption)
                         .keyboardShortcut("z")
                 }
-                Button("Archive done") { store.clearDone() }
+                Button("Archive done (\(doneCount))") { store.clearDone() }
                     .font(.caption)
+                    .disabled(doneCount == 0)
+                    .help("Moves completed tasks to the archive. They stay in the day's record.")
                 SettingsLink {
                     Image(systemName: "gearshape")
                 }
@@ -108,12 +110,12 @@ struct TaskListView: View {
 
     @ViewBuilder
     private var pendingList: some View {
-        if store.items.isEmpty {
-            Text("No tasks")
+        if visibleCount == 0 {
+            Text(store.items.isEmpty ? "No tasks" : "Nothing open here")
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 12)
-        } else if store.items.count > maxVisibleRows {
+        } else if visibleCount > maxVisibleRows {
             // Altura definida: un ScrollView con solo maxHeight colapsa a 0
             // dentro de un MenuBarExtra(.window), que se autodimensiona.
             ScrollView { taskRows }
@@ -162,9 +164,23 @@ struct TaskListView: View {
         .fixedSize()
     }
 
+    /// Open ensena solo lo que queda por hacer. Lo completado de hoy esta en
+    /// Today y lo anterior es historial: una pestaña llamada Open llena de
+    /// tareas tachadas no se sostiene, y con doscientas no se puede usar.
     private func matches(_ item: TodoItem) -> Bool {
+        guard !item.isDone else { return false }
         guard let listFilter else { return true }
         return item.listIdentifier == listFilter.id
+    }
+
+    /// Cuantas filas se van a pintar de verdad. El recuento total ya no sirve
+    /// para decidir ni el vacio ni el scroll.
+    private var visibleCount: Int {
+        store.items.count(where: matches)
+    }
+
+    private var doneCount: Int {
+        store.items.count { $0.isDone }
     }
 
     private func toggleDateEditor(for item: Binding<TodoItem>) {
