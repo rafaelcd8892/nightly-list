@@ -66,6 +66,13 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     }
 
     private func showMenu() {
+        // El popover se queda abierto detras del menu si no se cierra a mano:
+        // el menu no le roba el foco de la forma que dispara su cierre
+        // automatico.
+        if popover.isShown {
+            popover.performClose(nil)
+        }
+
         let menu = NSMenu()
 
         menu.addItem(item("Main Window…", #selector(openMainWindow)))
@@ -104,14 +111,17 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     @objc private func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
-        // El selector cambio de nombre en macOS 14; se prueban los dos.
-        let nuevo = Selector(("showSettingsWindow:"))
-        let viejo = Selector(("showPreferencesWindow:"))
-        if NSApp.responds(to: nuevo) {
-            NSApp.perform(nuevo, with: nil)
-        } else if NSApp.responds(to: viejo) {
-            NSApp.perform(viejo, with: nil)
+
+        // sendAction recorre la cadena de respondedores. responds(to:) solo
+        // pregunta a NSApplication, y la accion de Ajustes no vive ahi: por eso
+        // no abria desde el menu mientras el SettingsLink del popover si.
+        // El selector cambio de nombre en macOS 14, se prueban los dos.
+        for selector in [Selector(("showSettingsWindow:")), Selector(("showPreferencesWindow:"))]
+        where NSApp.sendAction(selector, to: nil, from: nil) {
+            return
         }
+
+        DiagnosticLog.shared.log(.app, "Could not open Settings from the status item menu")
     }
 
     @objc private func archiveDone() {
