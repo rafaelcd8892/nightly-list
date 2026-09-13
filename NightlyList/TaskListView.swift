@@ -109,9 +109,34 @@ struct TaskListView: View {
     }
 
     private var taskRows: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(activeBuckets) { bucket in
+                VStack(alignment: .leading, spacing: 4) {
+                    // Con un solo tramo el encabezado no dice nada que no se
+                    // vea ya.
+                    if activeBuckets.count > 1 {
+                        Text(bucket.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(bucket == .overdue ? Color.red : Color.secondary)
+                    }
+
+                    rows(in: bucket)
+                }
+            }
+        }
+    }
+
+    /// Los tramos que tienen alguna tarea, en su orden.
+    private var activeBuckets: [DueBucket] {
+        DueBucket.allCases.filter { bucket in
+            store.items.contains { matches($0) && DueBucket.of($0) == bucket }
+        }
+    }
+
+    private func rows(in bucket: DueBucket) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach($store.items) { $item in
-                if matches(item) {
+                if matches(item), DueBucket.of(item) == bucket {
                     TaskRow(
                         item: $item,
                         isEditingDate: editingDateFor == item.id,
