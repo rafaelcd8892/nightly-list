@@ -309,4 +309,20 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertFalse(store.items[0].isDone)
         XCTAssertEqual(store.items.count, 1)
     }
+
+    /// Lo que hace la vista Hoy: coge el id de una fila del informe y lo
+    /// manda al store. Si los ids no cuadraran, marcar no haria nada.
+    func testTogglingByTheIDShownInTodaysReportUpdatesTheStore() {
+        let store = makeStore()
+        store.add("Pendiente de hoy")
+
+        let before = DayReport(items: store.items, archived: store.archived)
+        let id = try! XCTUnwrap(before.created.first).id
+
+        store.toggleCompletion(id: id)
+
+        let after = DayReport(items: store.items, archived: store.archived)
+        XCTAssertEqual(after.completed.map(\.title), ["Pendiente de hoy"])
+        XCTAssertTrue(after.created.isEmpty)
+    }
 }

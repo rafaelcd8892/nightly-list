@@ -40,6 +40,7 @@ struct TaskListView: View {
             case .today:
                 DayReportView(
                     report: DayReport(items: store.items, archived: store.archived),
+                    maxVisibleRows: maxVisibleRows,
                     onToggle: store.toggleCompletion(id:)
                 )
             }
@@ -177,6 +178,7 @@ private struct TaskRow: View {
                 } label: {
                     Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(item.isDone ? Color.green : Color.secondary)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
 
@@ -330,8 +332,13 @@ private func suggestedDueDate() -> Date {
 /// El dia de un vistazo, y el boton que lo saca en Markdown.
 private struct DayReportView: View {
     let report: DayReport
+    /// El mismo umbral que la lista Open, para que el popover no cambie de
+    /// tamaño al saltar de pestaña.
+    let maxVisibleRows: Int
     let onToggle: (TodoItem.ID) -> Void
     @State private var copied = false
+
+    private var rowCount: Int { report.completed.count + report.created.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -340,27 +347,15 @@ private struct DayReportView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 12)
+            } else if rowCount > maxVisibleRows {
+                // Altura definida y no maxHeight: dentro de un
+                // MenuBarExtra(.window) un ScrollView sin altura fija colapsa
+                // a cero. Mismo umbral y misma altura que la lista Open, para
+                // que el popover no baile al cambiar de pestaña.
+                ScrollView { sections }
+                    .frame(height: 320)
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        if !report.completed.isEmpty {
-                            section("Done", count: report.completed.count) {
-                                ForEach(report.completed) { item in
-                                    row(item, time: item.completedAt, done: true)
-                                }
-                            }
-                        }
-
-                        if !report.created.isEmpty {
-                            section("Added", count: report.created.count) {
-                                ForEach(report.created) { item in
-                                    row(item, time: nil, done: false)
-                                }
-                            }
-                        }
-                    }
-                }
-                .frame(height: 240)
+                sections
             }
 
             Button {
@@ -381,6 +376,27 @@ private struct DayReportView: View {
         }
     }
 
+    private var sections: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !report.completed.isEmpty {
+                section("Done", count: report.completed.count) {
+                    ForEach(report.completed) { item in
+                        row(item, time: item.completedAt, done: true)
+                    }
+                }
+            }
+
+            if !report.created.isEmpty {
+                section("Added", count: report.created.count) {
+                    ForEach(report.created) { item in
+                        row(item, time: nil, done: false)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     @ViewBuilder
     private func section<Content: View>(
         _ title: String,
@@ -396,13 +412,15 @@ private struct DayReportView: View {
     }
 
     private func row(_ item: TodoItem, time: Date?, done: Bool) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Button {
                 onToggle(item.id)
             } label: {
                 Image(systemName: done ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(done ? Color.green : Color.secondary)
-                    .font(.caption)
+                    // Sin contentShape el area sensible es solo el trazo del
+                    // simbolo, que son cuatro pixeles y no se acierta.
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help(done ? "Mark as open" : "Mark as done")
@@ -419,7 +437,7 @@ private struct DayReportView: View {
 
             if let time {
                 Text(time, style: .time)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.tertiary)
             }
         }
