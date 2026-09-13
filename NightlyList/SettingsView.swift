@@ -91,6 +91,29 @@ private struct SyncSettingsTab: View {
                 }
             }
 
+            if sync.isSyncEnabled && !sync.lists.isEmpty {
+                Section {
+                    ForEach(sync.lists) { list in
+                        Toggle(isOn: Binding(
+                            get: { sync.isEnabled(list) },
+                            set: { sync.setList(list, enabled: $0) }
+                        )) {
+                            Label {
+                                Text(list.title)
+                            } icon: {
+                                Image(systemName: "circle.fill").foregroundStyle(list.color)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Lists to sync")
+                } footer: {
+                    Text("Turning a list off removes its tasks from here. They stay in Reminders and come back if you turn it on again.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             if let error = sync.lastSyncError {
                 Section {
                     Text(error)

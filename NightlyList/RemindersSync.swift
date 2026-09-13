@@ -24,8 +24,14 @@ final class RemindersSync: ObservableObject {
         }
     }
     
-    /// Las listas de Recordatorios del usuario, para poder elegir y filtrar.
+    /// Todas las listas de Recordatorios del usuario, para poder elegir y
+    /// filtrar. Estan todas, tambien las que no se sincronizan.
     @Published private(set) var lists: [TaskList] = []
+
+    /// Las listas que se sincronizan. nil mientras el usuario no elija, y
+    /// entonces son todas: una app que al activarse no trae nada no se
+    /// entiende.
+    @Published private(set) var enabledListIDs: Set<String>?
 
     /// Errores de sincronizacion para mostrar en la UI.
     @Published var lastSyncError: String?
@@ -35,6 +41,7 @@ final class RemindersSync: ObservableObject {
     
     private let syncEnabledKey = "reminders.sync.enabled"
     private let lastSyncKey = "reminders.sync.lastDate"
+    private let enabledListsKey = "reminders.sync.lists"
 
     /// performFullSync escribe en TaskStore.items, y el didSet de esa
     /// propiedad vuelve a llamar a performFullSync. Sin esta guarda cada
@@ -47,6 +54,10 @@ final class RemindersSync: ObservableObject {
         
         if let timestamp = UserDefaults.standard.object(forKey: lastSyncKey) as? Date {
             self.lastSyncDate = timestamp
+        }
+
+        if let stored = UserDefaults.standard.array(forKey: enabledListsKey) as? [String] {
+            self.enabledListIDs = Set(stored)
         }
         
         // Observar cambios externos en la app Recordatorios
@@ -130,7 +141,7 @@ final class RemindersSync: ObservableObject {
             // 2. Obtener los recordatorios de todas las listas, no solo de la
             // de por defecto, que es lo que las colapsaba todas en una.
             refreshLists()
-            let predicate = eventStore.predicateForReminders(in: reminderCalendars())
+            let predicate = eventStore.predicateForReminders(in: enabledCalendars())
             let reminders = try await fetchReminders(matching: predicate)
             
             // 3. Obtener todas las tareas locales
@@ -197,7 +208,11 @@ final class RemindersSync: ObservableObject {
         var unclaimedByKey: [String: EKReminder] = [:]
         for reminder in remindersByID.values
         where !claimedIDs.contains(reminder.calendarItemIdentifier) {
-            let key = dedupeKey(list: reminder.calendar?.calendarIdentifier, title: reminder.title ?? "")
+            guard let key = dedupeKey(
+                list: reminder.calendar?.calendarIdentifier,
+                title: reminder.title ?? "",
+                isCompleted: reminder.isCompleted
+            ) else { continue }
             if unclaimedByKey[key] == nil { unclaimedByKey[key] = reminder }
         }
 
@@ -213,8 +228,12 @@ final class RemindersSync: ObservableObject {
                 if shouldUpdateReminder(existingReminder, with: item) {
                     try updateReminder(existingReminder, from: item)
                 }
-            } else if let twin = unclaimedByKey
-                .removeValue(forKey: dedupeKey(list: item.listIdentifier, title: item.title)) {
+            } else if let key = dedupeKey(
+                        list: item.listIdentifier,
+                        title: item.title,
+                        isCompleted: item.isDone
+                      ),
+                      let twin = unclaimedByKey.removeValue(forKey: key) {
                 // Ya hay un recordatorio con ese titulo: se adopta. Crear uno
                 // nuevo es lo que dejaba la tarea por duplicado en los dos
                 // lados.
@@ -240,10 +259,14 @@ final class RemindersSync: ObservableObject {
                 if shouldUpdateLocalItem(existingItem, with: reminder) {
                     updateLocalItem(from: reminder)
                 }
-            } else if TaskStore.shared.items.contains(where: {
-                dedupeKey(list: $0.listIdentifier, title: $0.title)
-                    == dedupeKey(list: reminder.calendar?.calendarIdentifier, title: reminder.title ?? "")
-            }) {
+            } else if let key = dedupeKey(
+                        list: reminder.calendar?.calendarIdentifier,
+                        title: reminder.title ?? "",
+                        isCompleted: reminder.isCompleted
+                      ),
+                      TaskStore.shared.items.contains(where: {
+                          dedupeKey(list: $0.listIdentifier, title: $0.title, isCompleted: $0.isDone) == key
+                      }) {
                 // Ya hay una tarea local con ese titulo: o se acaba de enlazar
                 // arriba, o la app Recordatorios tiene el recordatorio por
                 // duplicado. En ninguno de los dos casos toca crear otra.
@@ -263,7 +286,14 @@ final class RemindersSync: ObservableObject {
         var merged: [TodoItem] = []
 
         for item in TaskStore.shared.items {
-            let key = dedupeKey(list: item.listIdentifier, title: item.title)
+            guard let key = dedupeKey(
+                list: item.listIdentifier,
+                title: item.title,
+                isCompleted: item.isDone
+            ) else {
+                merged.append(item)
+                continue
+            }
 
             guard let index = survivorIndexByTitle[key] else {
                 survivorIndexByTitle[key] = merged.count
@@ -291,19 +321,71 @@ final class RemindersSync: ObservableObject {
         TaskStore.shared.items = merged
     }
 
-    /// La clave de deduplicacion lleva la lista delante: el mismo titulo en
-    /// dos listas distintas son dos tareas legitimas, no un duplicado. Una
-    /// tarea sin lista se compara contra la de por defecto, que es donde
+    /// La clave con la que se decide si dos cosas son la misma tarea.
+    ///
+    /// Lleva la lista delante porque el mismo titulo en dos listas son dos
+    /// tareas legitimas. Y devuelve nil para las completadas: comprar leche
+    /// tres martes distintos son tres hechos con su fecha, no un duplicado.
+    /// Deduplicarlos borraba el historial, que es justo lo que esta app
+    /// existe para guardar.
+    static func dedupeKey(listID: String, title: String, isCompleted: Bool) -> String? {
+        guard !isCompleted else { return nil }
+        return listID + "\u{1}" + normalizedTitle(title)
+    }
+
+    /// Una tarea sin lista se compara contra la de por defecto, que es donde
     /// acabara.
-    private func dedupeKey(list: String?, title: String) -> String {
-        let listID = list ?? defaultCalendar().calendarIdentifier
-        return listID + "\u{1}" + Self.normalizedTitle(title)
+    private func dedupeKey(list: String?, title: String, isCompleted: Bool) -> String? {
+        Self.dedupeKey(
+            listID: list ?? defaultCalendar().calendarIdentifier,
+            title: title,
+            isCompleted: isCompleted
+        )
     }
 
     /// Todas las listas de recordatorios del usuario.
     private func reminderCalendars() -> [EKCalendar] {
         let calendars = eventStore.calendars(for: .reminder)
         return calendars.isEmpty ? [defaultCalendar()] : calendars
+    }
+
+    /// Solo las que el usuario quiere sincronizar.
+    private func enabledCalendars() -> [EKCalendar] {
+        guard let enabledListIDs else { return reminderCalendars() }
+        let elegidas = reminderCalendars().filter { enabledListIDs.contains($0.calendarIdentifier) }
+        return elegidas.isEmpty ? [] : elegidas
+    }
+
+    func isEnabled(_ list: TaskList) -> Bool {
+        enabledListIDs?.contains(list.id) ?? true
+    }
+
+    /// Activa o desactiva una lista.
+    ///
+    /// Al desactivarla se retiran de la lista local sus tareas ya
+    /// sincronizadas: siguen en la app Recordatorios, asi que no se pierde
+    /// nada, y volveran solas si se reactiva. Las que nunca llegaron a
+    /// sincronizarse se quedan, porque esas si existen solo aqui.
+    func setList(_ list: TaskList, enabled: Bool) {
+        var seleccion = enabledListIDs ?? Set(lists.map(\.id))
+        if enabled {
+            seleccion.insert(list.id)
+        } else {
+            seleccion.remove(list.id)
+        }
+        enabledListIDs = seleccion
+        UserDefaults.standard.set(Array(seleccion), forKey: enabledListsKey)
+
+        if !enabled {
+            let antes = TaskStore.shared.items.count
+            TaskStore.shared.dropSyncedItems(inList: list.id)
+            DiagnosticLog.shared.log(
+                .sync,
+                "Stopped syncing \(list.title), removed \(antes - TaskStore.shared.items.count) tasks"
+            )
+        }
+
+        Task { await performFullSync() }
     }
 
     func refreshLists() {

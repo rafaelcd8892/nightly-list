@@ -161,6 +161,13 @@ final class TaskStore: ObservableObject {
         DiagnosticLog.shared.log(.storage, "Archived \(removed.count) completed tasks")
     }
 
+    /// Retira las tareas de una lista que ya existen en la app Recordatorios.
+    /// No es un borrado: siguen alli y vuelven si se reactiva la lista. Las
+    /// que nunca se sincronizaron se quedan, porque esas solo viven aqui.
+    func dropSyncedItems(inList listID: String) {
+        items.removeAll { $0.listIdentifier == listID && $0.reminderIdentifier != nil }
+    }
+
     /// Reinserta lo ultimo que se quito, en su posicion original. Vale tanto
     /// para una tarea borrada con la x como para el lote de "Limpiar hechas".
     func undoRemoval() {
