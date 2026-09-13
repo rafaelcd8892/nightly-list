@@ -1,6 +1,6 @@
 //
-//  RecordatoriosApp.swift
-//  Recordatorios
+//  NightlyListApp.swift
+//  Nightly List
 //
 //  Created by Rafael on 11/09/26.
 //
@@ -10,7 +10,7 @@ import Carbon.HIToolbox
 import UserNotifications
 
 @main
-struct RecordatoriosApp: App {
+struct NightlyListApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = TaskStore.shared
 

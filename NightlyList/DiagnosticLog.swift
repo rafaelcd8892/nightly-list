@@ -27,13 +27,13 @@ final class DiagnosticLog: ObservableObject {
     /// Cambia con cada escritura para que la vista de Ajustes se entere.
     @Published private(set) var revision = 0
 
-    private let logger = Logger(subsystem: "rafaelcd8892.Recordatorios", category: "diagnostico")
+    private let logger = Logger(subsystem: "rafaelcd8892.NightlyList", category: "diagnostico")
     let fileURL: URL?
 
     private init() {
         fileURL = try? FileManager.default
             .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-            .appendingPathComponent("Recordatorios", isDirectory: true)
+            .appendingPathComponent("NightlyList", isDirectory: true)
             .appendingPathComponent("diagnostico.log", isDirectory: false)
     }
 

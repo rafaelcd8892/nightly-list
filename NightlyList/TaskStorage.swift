@@ -56,7 +56,7 @@ struct TaskStorage {
             create: true
         )
         return base
-            .appendingPathComponent("Recordatorios", isDirectory: true)
+            .appendingPathComponent("NightlyList", isDirectory: true)
             .appendingPathComponent("tasks.json", isDirectory: false)
     }
 

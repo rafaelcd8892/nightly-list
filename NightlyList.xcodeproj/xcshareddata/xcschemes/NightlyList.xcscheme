@@ -6,9 +6,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "5355CCAD3054EC4C00B0101B"
-               BuildableName = "Recordatorios.app"
-               BlueprintName = "Recordatorios"
-               ReferencedContainer = "container:Recordatorios.xcodeproj">
+               BuildableName = "Nightly List.app"
+               BlueprintName = "NightlyList"
+               ReferencedContainer = "container:NightlyList.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -19,9 +19,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "AA000000000000000000000A"
-               BuildableName = "RecordatoriosTests.xctest"
-               BlueprintName = "RecordatoriosTests"
-               ReferencedContainer = "container:Recordatorios.xcodeproj">
+               BuildableName = "NightlyListTests.xctest"
+               BlueprintName = "NightlyListTests"
+               ReferencedContainer = "container:NightlyList.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -31,9 +31,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5355CCAD3054EC4C00B0101B"
-            BuildableName = "Recordatorios.app"
-            BlueprintName = "Recordatorios"
-            ReferencedContainer = "container:Recordatorios.xcodeproj">
+            BuildableName = "Nightly List.app"
+            BlueprintName = "NightlyList"
+            ReferencedContainer = "container:NightlyList.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -42,9 +42,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5355CCAD3054EC4C00B0101B"
-            BuildableName = "Recordatorios.app"
-            BlueprintName = "Recordatorios"
-            ReferencedContainer = "container:Recordatorios.xcodeproj">
+            BuildableName = "Nightly List.app"
+            BlueprintName = "NightlyList"
+            ReferencedContainer = "container:NightlyList.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
