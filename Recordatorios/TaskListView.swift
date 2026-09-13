@@ -3,6 +3,7 @@ import SwiftUI
 struct TaskListView: View {
     @ObservedObject var store: TaskStore
     @StateObject private var loginItem = LoginItem()
+    @StateObject private var remindersSync = RemindersSync.shared
     @State private var newTitle = ""
     @State private var loginError: String?
     /// Tarea cuyo selector de fecha esta abierto, si hay alguno.
@@ -77,6 +78,44 @@ struct TaskListView: View {
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            
+            // Sincronizacion con la app Recordatorios
+            Divider()
+            
+            Toggle("Sincronizar con Recordatorios", isOn: Binding(
+                get: { remindersSync.isSyncEnabled },
+                set: { enableSync($0) }
+            ))
+            .toggleStyle(.checkbox)
+            .font(.caption)
+            
+            if remindersSync.isSyncEnabled {
+                HStack(spacing: 4) {
+                    if let lastSync = remindersSync.lastSyncDate {
+                        Text("Última sync: \(lastSync, style: .relative)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        Task { await remindersSync.performFullSync() }
+                    }) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Sincronizar ahora")
+                }
+            }
+            
+            if let syncError = remindersSync.lastSyncError {
+                Text(syncError)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(12)
         // 360 y no 320: con el boton Deshacer visible, el footer truncaba
@@ -126,6 +165,22 @@ private extension TaskListView {
         store.add(newTitle)
         newTitle = ""
     }
+    
+    func enableSync(_ enabled: Bool) {
+        if enabled {
+            Task {
+                let granted = await remindersSync.requestAuthorization()
+                if granted {
+                    remindersSync.isSyncEnabled = true
+                    await remindersSync.performFullSync()
+                } else {
+                    remindersSync.isSyncEnabled = false
+                }
+            }
+        } else {
+            remindersSync.isSyncEnabled = false
+        }
+    }
 }
 
 /// Una fila de la lista. Vive aparte porque el cuerpo del ForEach se volvio
@@ -145,6 +200,7 @@ private struct TaskRow: View {
             HStack(spacing: 8) {
                 Button {
                     item.isDone.toggle()
+                    item.lastModified = Date()
                 } label: {
                     Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(item.isDone ? Color.green : Color.secondary)
@@ -166,11 +222,20 @@ private struct TaskRow: View {
                             if !focused { commitTitle() }
                         }
                     } else {
-                        Text(item.title)
-                            .strikethrough(item.isDone)
-                            .foregroundStyle(item.isDone ? Color.secondary : Color.primary)
-                            .onTapGesture(count: 2) { startEditingTitle() }
-                            .help("Doble clic para renombrar")
+                        HStack(spacing: 4) {
+                            Text(item.title)
+                                .strikethrough(item.isDone)
+                                .foregroundStyle(item.isDone ? Color.secondary : Color.primary)
+                                .onTapGesture(count: 2) { startEditingTitle() }
+                                .help("Doble clic para renombrar")
+                            
+                            if item.isSyncedWithReminders {
+                                Image(systemName: "checkmark.circle.badge.questionmark.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(.blue)
+                                    .help("Sincronizado con Recordatorios")
+                            }
+                        }
                     }
 
                     if let dueDate = item.dueDate {
@@ -202,7 +267,10 @@ private struct TaskRow: View {
                         .datePickerStyle(.compact)
                         .labelsHidden()
 
-                    Button("Quitar") { item.dueDate = nil }
+                    Button("Quitar") { 
+                        item.dueDate = nil 
+                        item.lastModified = Date()
+                    }
                         .font(.caption)
                 }
                 .padding(.leading, 24)
@@ -222,6 +290,7 @@ private struct TaskRow: View {
         let trimmed = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             item.title = trimmed
+            item.lastModified = Date()
         }
         self.draftTitle = nil
     }
@@ -232,6 +301,7 @@ private struct TaskRow: View {
             get: { item.dueDate ?? suggestedDueDate() },
             set: {
                 item.dueDate = $0
+                item.lastModified = Date()
                 onDueDateChanged()
             }
         )

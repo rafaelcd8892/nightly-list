@@ -12,6 +12,11 @@ final class TaskStore: ObservableObject {
         didSet {
             save()
             ReminderScheduler.shared.sync(items)
+            
+            // Sincronizar con la app Recordatorios si esta activado
+            Task {
+                await RemindersSync.shared.performFullSync()
+            }
         }
     }
 
@@ -40,6 +45,13 @@ final class TaskStore: ObservableObject {
     func remove(_ item: TodoItem) {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
         lastRemoval = [Removal(item: items[index], index: index)]
+        
+        // Eliminar de Recordatorios si esta sincronizado
+        let removedItem = items[index]
+        Task {
+            await RemindersSync.shared.deleteItem(removedItem)
+        }
+        
         items.remove(at: index)
     }
 
@@ -49,6 +61,15 @@ final class TaskStore: ObservableObject {
             .map { Removal(item: $0.element, index: $0.offset) }
         guard !removed.isEmpty else { return }
         lastRemoval = removed
+        
+        // Eliminar de Recordatorios los que estan sincronizados
+        let removedItems = removed.map { $0.item }
+        Task {
+            for item in removedItems {
+                await RemindersSync.shared.deleteItem(item)
+            }
+        }
+        
         items.removeAll { $0.isDone }
     }
 

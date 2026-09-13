@@ -1,0 +1,20 @@
+NOTA: este proyecto NO tiene un Info.plist propio.
+
+Xcode lo genera a partir de los ajustes INFOPLIST_KEY_* del target, asi que
+crear un Info.plist a mano aqui romperia la compilacion. Las claves ya estan
+puestas en project.pbxproj, en las configuraciones Debug y Release:
+
+    INFOPLIST_KEY_LSUIElement = YES;
+    INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Recordatorios sincroniza tus tareas con la app Recordatorios de Apple para que las veas en todos tus dispositivos.";
+
+Y el entitlement del sandbox que hace falta para EventKit sale de:
+
+    ENABLE_RESOURCE_ACCESS_CALENDARS = YES;
+
+que genera com.apple.security.personal-information.calendars. En macOS el
+acceso a Recordatorios va por el entitlement de calendarios; no existe uno
+separado para recordatorios.
+
+Ojo con la clave: requestFullAccessToReminders() exige
+NSRemindersFullAccessUsageDescription. Con la antigua NSRemindersUsageDescription
+la peticion falla con "Mach error 4099".
