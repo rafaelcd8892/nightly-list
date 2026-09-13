@@ -259,6 +259,14 @@ final class RemindersSync: ObservableObject {
                 if shouldUpdateLocalItem(existingItem, with: reminder) {
                     updateLocalItem(from: reminder)
                 }
+            } else if TaskStore.shared.archived.contains(where: {
+                $0.reminderIdentifier == reminderID
+            }) {
+                // Ya se archivo. El recordatorio sigue en la app Recordatorios
+                // a proposito, asi que sin esta comprobacion la siguiente
+                // pasada lo devolvia a la lista activa y archivar no servia de
+                // nada.
+                continue
             } else if let key = dedupeKey(
                         list: reminder.calendar?.calendarIdentifier,
                         title: reminder.title ?? "",

@@ -7,7 +7,8 @@ struct TaskListView: View {
     @State private var editingDateFor: TodoItem.ID?
     @State private var notificationsDenied = false
     @Environment(\.openWindow) private var openWindow
-    @State private var mode: Mode = .pending
+    // Today primero: lo que se abre a mirar es el dia, no el inventario.
+    @State private var mode: Mode = .today
     /// Lista por la que se filtra, o nil para todas.
     @State private var listFilter: TaskList?
     @StateObject private var sync = RemindersSync.shared
@@ -81,34 +82,7 @@ struct TaskListView: View {
                         .font(.caption)
                         .keyboardShortcut("z")
                 }
-                Button("Archive done (\(doneCount))") { store.clearDone() }
-                    .font(.caption)
-                    .disabled(doneCount == 0)
-                    .help("Moves completed tasks to the archive. They stay in the day's record.")
-                Button {
-                    MainWindow.open(with: openWindow)
-                } label: {
-                    Image(systemName: "macwindow")
-                }
-                .buttonStyle(.plain)
-                .font(.caption)
-                .help("Open the main window")
-
-                SettingsLink {
-                    Image(systemName: "gearshape")
-                }
-                .buttonStyle(.plain)
-                .font(.caption)
-                .help("Settings")
-                // Una app LSUIElement no se pone delante sola: sin esto la
-                // ventana de Ajustes se abre detras de todo.
-                .simultaneousGesture(TapGesture().onEnded {
-                    NSApp.activate(ignoringOtherApps: true)
-                })
-
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-                    .font(.caption)
-                    .keyboardShortcut("q")
+                moreMenu
             }
 
         }
@@ -149,6 +123,40 @@ struct TaskListView: View {
                 }
             }
         }
+    }
+
+    /// Lo que no se usa a diario vive aqui, para que el pie del popover no
+    /// sea una hilera de botones.
+    private var moreMenu: some View {
+        Menu {
+            Button("Main Window…") { MainWindow.open(with: openWindow) }
+
+            SettingsLink {
+                Text("Settings…")
+            }
+            // Una app LSUIElement no se pone delante sola: sin esto la ventana
+            // se abre detras de todo.
+            .simultaneousGesture(TapGesture().onEnded {
+                NSApp.activate(ignoringOtherApps: true)
+            })
+
+            Divider()
+
+            Button("Archive \(doneCount) completed") { store.clearDone() }
+                .disabled(doneCount == 0)
+
+            Divider()
+
+            Button("Quit") { NSApplication.shared.terminate(nil) }
+                .keyboardShortcut("q")
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .font(.caption)
+        .help("More")
     }
 
     private var listFilterMenu: some View {
