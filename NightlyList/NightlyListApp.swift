@@ -12,46 +12,14 @@ import UserNotifications
 @main
 struct NightlyListApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var store = TaskStore.shared
 
+    /// La unica escena de SwiftUI. El icono de la barra y la ventana principal
+    /// se gestionan con AppKit desde el delegado, porque MenuBarExtra no
+    /// distingue el boton del raton y no deja poner menu contextual.
     var body: some Scene {
-        MenuBarExtra {
-            TaskListView(store: store)
-        } label: {
-            Image(nsImage: Self.statusImage(pending: store.pendingCount))
-        }
-        .menuBarExtraStyle(.window)
-
-        Window("Nightly List", id: MainWindow.id) {
-            MainWindowView(store: store)
-        }
-        .defaultSize(width: 900, height: 560)
-
         Settings {
             SettingsView()
         }
-    }
-
-    /// MenuBarExtra solo respeta un Text o un Image como label: un HStack se
-    /// ignora y un Label o un Text con simbolo interpolado pierden una de las
-    /// dos partes. Para ensenar icono y numero juntos hay que rasterizarlos.
-    private static func statusImage(pending: Int) -> NSImage {
-        let label = HStack(spacing: 3) {
-            Image(systemName: "checklist")
-            Text("\(pending)")
-                .font(.system(size: 12, weight: .semibold))
-        }
-        .frame(height: 16)
-
-        let renderer = ImageRenderer(content: label)
-        renderer.scale = 2
-
-        guard let image = renderer.nsImage else {
-            return NSImage(systemSymbolName: "checklist", accessibilityDescription: nil) ?? NSImage()
-        }
-        // Plantilla: el sistema lo recolorea segun la barra clara u oscura.
-        image.isTemplate = true
-        return image
     }
 }
 
@@ -59,10 +27,13 @@ struct NightlyListApp: App {
 /// aviso cuando la app esta activa (que es justo cuando el popover esta abierto).
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private let quickAdd = QuickAddPanel()
+    private var statusItem: StatusItemController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
         DiagnosticLog.shared.log(.app, "Launched")
+
+        statusItem = StatusItemController(store: .shared)
 
         // Option+Espacio abre la captura rapida.
         HotKeyCenter.shared.register(
@@ -71,6 +42,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         ) { [quickAdd] in
             quickAdd.toggle()
         }
+    }
+
+    /// Cerrar la ventana principal no puede cerrar la app: lo normal en una
+    /// app de barra de menus es que siga ahi.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
     }
 
     func userNotificationCenter(

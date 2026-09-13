@@ -212,14 +212,3 @@ struct MainWindowView: View {
         }
     }
 }
-
-/// Abrir la ventana desde una app sin Dock ni menu tiene truco: hay que
-/// activar la app a mano o aparece detras de todo.
-enum MainWindow {
-    static let id = "main"
-
-    static func open(with openWindow: OpenWindowAction) {
-        NSApp.activate(ignoringOtherApps: true)
-        openWindow(id: id)
-    }
-}

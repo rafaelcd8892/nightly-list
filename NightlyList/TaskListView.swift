@@ -6,7 +6,6 @@ struct TaskListView: View {
     /// Tarea cuyo selector de fecha esta abierto, si hay alguno.
     @State private var editingDateFor: TodoItem.ID?
     @State private var notificationsDenied = false
-    @Environment(\.openWindow) private var openWindow
     // Today primero: lo que se abre a mirar es el dia, no el inventario.
     @State private var mode: Mode = .today
     /// Lista por la que se filtra, o nil para todas.
@@ -129,7 +128,7 @@ struct TaskListView: View {
     /// sea una hilera de botones.
     private var moreMenu: some View {
         Menu {
-            Button("Main Window…") { MainWindow.open(with: openWindow) }
+            Button("Main Window…") { MainWindowController.shared.show() }
 
             SettingsLink {
                 Text("Settings…")
