@@ -31,6 +31,11 @@ final class RemindersSync: ObservableObject {
     
     private let syncEnabledKey = "reminders.sync.enabled"
     private let lastSyncKey = "reminders.sync.lastDate"
+
+    /// performFullSync escribe en TaskStore.items, y el didSet de esa
+    /// propiedad vuelve a llamar a performFullSync. Sin esta guarda cada
+    /// sincronizacion desencadena otra.
+    private var isSyncing = false
     
     private init() {
         self.authorizationStatus = EKEventStore.authorizationStatus(for: .reminder)
@@ -108,34 +113,46 @@ final class RemindersSync: ObservableObject {
     /// 2. Baja recordatorios que no esten en local
     /// 3. Actualiza los que existen en ambos lados
     func performFullSync() async {
-        guard isSyncEnabled else { return }
+        guard isSyncEnabled, !isSyncing else { return }
         guard await ensureAuthorized() else { return }
-        
+
+        isSyncing = true
+        defer { isSyncing = false }
+
         do {
-            // 1. Obtener todos los recordatorios de la app Recordatorios
+            // 1. Fundir duplicados que ya hubiera en la lista local
+            mergeDuplicateLocalItems()
+
+            // 2. Obtener todos los recordatorios de la app Recordatorios
             let predicate = eventStore.predicateForReminders(in: [defaultCalendar()])
             let reminders = try await fetchReminders(matching: predicate)
             
-            // 2. Obtener todas las tareas locales
+            // 3. Obtener todas las tareas locales
             let localItems = TaskStore.shared.items
             
-            // 3. Crear mapas para comparacion rapida
+            // 4. Crear mapas para comparacion rapida. uniquingKeysWith y no
+            // uniqueKeysWithValues: con dos claves iguales lo segundo aborta
+            // el proceso.
             let remindersByID = Dictionary(
-                uniqueKeysWithValues: reminders.map { ($0.calendarItemIdentifier, $0) }
-            )
-            let localItemsByReminderID = Dictionary(
-                uniqueKeysWithValues: localItems
-                    .compactMap { item -> (String, TodoItem)? in
-                        guard let reminderID = item.reminderIdentifier else { return nil }
-                        return (reminderID, item)
-                    }
+                reminders.map { ($0.calendarItemIdentifier, $0) },
+                uniquingKeysWith: { first, _ in first }
             )
             
-            // 4. Sincronizar en ambas direcciones
+            // 5. Sincronizar en ambas direcciones
             try await syncLocalToReminders(localItems, remindersByID: remindersByID)
+
+            // El mapa se calcula aqui y no antes: syncLocalToReminders puede
+            // haber enlazado tareas locales con recordatorios ya existentes.
+            let localItemsByReminderID = Dictionary(
+                TaskStore.shared.items.compactMap { item -> (String, TodoItem)? in
+                    guard let reminderID = item.reminderIdentifier else { return nil }
+                    return (reminderID, item)
+                },
+                uniquingKeysWith: { first, _ in first }
+            )
             try await syncRemindersToLocal(reminders, localItemsByReminderID: localItemsByReminderID)
             
-            // 5. Actualizar estado
+            // 6. Actualizar estado
             lastSyncError = nil
             lastSyncDate = Date()
             UserDefaults.standard.set(lastSyncDate, forKey: lastSyncKey)
@@ -163,6 +180,16 @@ final class RemindersSync: ObservableObject {
         _ localItems: [TodoItem],
         remindersByID: [String: EKReminder]
     ) async throws {
+        // Recordatorios que todavia no tiene ninguna tarea local, indexados
+        // por titulo: son los candidatos a adoptar en vez de duplicar.
+        let claimedIDs = Set(localItems.compactMap(\.reminderIdentifier))
+        var unclaimedByTitle: [String: EKReminder] = [:]
+        for reminder in remindersByID.values
+        where !claimedIDs.contains(reminder.calendarItemIdentifier) {
+            let key = Self.normalizedTitle(reminder.title ?? "")
+            if unclaimedByTitle[key] == nil { unclaimedByTitle[key] = reminder }
+        }
+
         for item in localItems {
             if let reminderID = item.reminderIdentifier,
                let existingReminder = remindersByID[reminderID] {
@@ -170,6 +197,12 @@ final class RemindersSync: ObservableObject {
                 if shouldUpdateReminder(existingReminder, with: item) {
                     try updateReminder(existingReminder, from: item)
                 }
+            } else if let twin = unclaimedByTitle
+                .removeValue(forKey: Self.normalizedTitle(item.title)) {
+                // Ya hay un recordatorio con ese titulo: se adopta. Crear uno
+                // nuevo es lo que dejaba la tarea por duplicado en los dos
+                // lados.
+                updateLocalItem(item, withReminderID: twin.calendarItemIdentifier)
             } else {
                 // Crear nuevo recordatorio
                 let reminderID = try await createReminder(from: item)
@@ -191,11 +224,56 @@ final class RemindersSync: ObservableObject {
                 if shouldUpdateLocalItem(existingItem, with: reminder) {
                     updateLocalItem(from: reminder)
                 }
+            } else if TaskStore.shared.items.contains(where: {
+                Self.normalizedTitle($0.title) == Self.normalizedTitle(reminder.title ?? "")
+            }) {
+                // Ya hay una tarea local con ese titulo: o se acaba de enlazar
+                // arriba, o la app Recordatorios tiene el recordatorio por
+                // duplicado. En ninguno de los dos casos toca crear otra.
+                continue
             } else {
                 // Crear nueva tarea local desde recordatorio
                 createLocalItem(from: reminder)
             }
         }
+    }
+
+    /// Funde las tareas locales que comparten titulo en una sola. Gana la
+    /// primera de la lista; de las demas se rescata el reminderIdentifier si
+    /// ella no tiene, y el estado de la mas recientemente modificada.
+    private func mergeDuplicateLocalItems() {
+        var survivorIndexByTitle: [String: Int] = [:]
+        var merged: [TodoItem] = []
+
+        for item in TaskStore.shared.items {
+            let key = Self.normalizedTitle(item.title)
+
+            guard let index = survivorIndexByTitle[key] else {
+                survivorIndexByTitle[key] = merged.count
+                merged.append(item)
+                continue
+            }
+
+            var survivor = merged[index]
+            if item.lastModified > survivor.lastModified {
+                survivor.isDone = item.isDone
+                survivor.dueDate = item.dueDate
+                survivor.lastModified = item.lastModified
+            }
+            survivor.reminderIdentifier = survivor.reminderIdentifier ?? item.reminderIdentifier
+            merged[index] = survivor
+        }
+
+        guard merged.count != TaskStore.shared.items.count else { return }
+        TaskStore.shared.items = merged
+    }
+
+    /// Titulos comparables: sin espacios de sobra, sin distinguir mayusculas
+    /// ni acentos, para que "Kit corta-unas" y "Kit corta-uñas" no convivan.
+    private static func normalizedTitle(_ title: String) -> String {
+        title
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
     }
     
     // MARK: - Individual Operations
