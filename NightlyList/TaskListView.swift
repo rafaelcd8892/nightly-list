@@ -48,8 +48,13 @@ struct TaskListView: View {
             case .pending:
                 pendingList
             case .today:
+                // El filtro de lista vale para las dos pestañas: mirar "Work"
+                // y que Today siga ensenandolo todo no tiene sentido.
                 DayReportView(
-                    report: DayReport(items: store.items, archived: store.archived),
+                    report: DayReport(
+                        items: store.items.filter(matchesList),
+                        archived: store.archived.filter(matchesList)
+                    ),
                     maxVisibleRows: maxVisibleRows,
                     onToggle: store.toggleCompletion(id:)
                 )
@@ -89,6 +94,9 @@ struct TaskListView: View {
         // 360 y no 320: con el boton Deshacer visible, el footer truncaba
         // "Limpiar hechas" a "Limpiar h...".
         .frame(width: 360)
+        // El popover se abre a menudo; es buen momento para que la lista
+        // activa se limpie sola.
+        .onAppear { store.archiveOldCompleted() }
     }
 
     @ViewBuilder
@@ -159,11 +167,6 @@ struct TaskListView: View {
 
             Divider()
 
-            Button("Archive \(doneCount) completed") { store.clearDone() }
-                .disabled(doneCount == 0)
-
-            Divider()
-
             Button("Quit") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
         } label: {
@@ -187,13 +190,20 @@ struct TaskListView: View {
                     Label {
                         Text(list.title)
                     } icon: {
-                        Image(systemName: "circle.fill").foregroundStyle(list.color)
+                        Image(nsImage: list.dotImage)
                     }
                 }
             }
         } label: {
-            Text(listFilter?.title ?? "All lists")
-                .font(.caption)
+            HStack(spacing: 4) {
+                if let listFilter {
+                    Circle()
+                        .fill(listFilter.color)
+                        .frame(width: 7, height: 7)
+                }
+                Text(listFilter?.title ?? "All lists")
+            }
+            .font(.caption)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -203,7 +213,10 @@ struct TaskListView: View {
     /// Today y lo anterior es historial: una pestaña llamada Open llena de
     /// tareas tachadas no se sostiene, y con doscientas no se puede usar.
     private func matches(_ item: TodoItem) -> Bool {
-        guard !item.isDone else { return false }
+        !item.isDone && matchesList(item)
+    }
+
+    private func matchesList(_ item: TodoItem) -> Bool {
         guard let listFilter else { return true }
         return item.listIdentifier == listFilter.id
     }

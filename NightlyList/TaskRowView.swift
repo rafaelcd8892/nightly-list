@@ -46,20 +46,15 @@ struct TaskRow: View {
                             if !focused { commitTitle() }
                         }
                     } else {
-                        HStack(spacing: 4) {
-                            Text(item.title)
-                                .strikethrough(item.isDone)
-                                .foregroundStyle(item.isDone ? Color.secondary : Color.primary)
-                                .onTapGesture(count: 2) { startEditingTitle() }
-                                .help("Double-click to rename")
-                            
-                            if item.isSyncedWithReminders {
-                                Image(systemName: "checkmark.circle.badge.questionmark.fill")
-                                    .font(.caption2)
-                                    .foregroundStyle(.blue)
-                                    .help("Synced with Apple Reminders")
-                            }
-                        }
+                        // Sin distintivo de sincronizada: ahora lo esta todo,
+                        // asi que salia en todas las filas y no distinguia
+                        // nada. Ademas era un check con interrogacion, que se
+                        // lee como que algo va mal.
+                        Text(item.title)
+                            .strikethrough(item.isDone)
+                            .foregroundStyle(item.isDone ? Color.secondary : Color.primary)
+                            .onTapGesture(count: 2) { startEditingTitle() }
+                            .help("Double-click to rename")
                     }
 
                     if let dueDate = item.dueDate {

@@ -40,7 +40,13 @@ enum DueBucket: Int, CaseIterable, Identifiable, Comparable {
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> DueBucket {
-        guard let dueDate = item.dueDate else { return .noDate }
+        guard let dueDate = item.dueDate else {
+            // Lo apuntado hoy se trata como de hoy. Sin esto una tarea recien
+            // escrita nacia en "No date", la ultima seccion, fuera de pantalla.
+            // No se le pone fecha de verdad a proposito: eso crearia una alarma
+            // en la app Recordatorios por cada tarea.
+            return calendar.isDate(item.createdAt, inSameDayAs: now) ? .today : .noDate
+        }
 
         if dueDate < calendar.startOfDay(for: now) { return .overdue }
         if calendar.isDate(dueDate, inSameDayAs: now) { return .today }

@@ -78,12 +78,6 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         menu.addItem(item("Main Window…", #selector(openMainWindow)))
         menu.addItem(item("Settings…", #selector(openSettings)))
         menu.addItem(.separator())
-
-        let archivar = item("Archive \(doneCount) completed", #selector(archiveDone))
-        archivar.isEnabled = doneCount > 0
-        menu.addItem(archivar)
-
-        menu.addItem(.separator())
         menu.addItem(item("Quit", #selector(quit), key: "q"))
 
         // Asignar el menu al status item haria que el clic izquierdo tambien lo
@@ -99,10 +93,6 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         return menuItem
     }
 
-    private var doneCount: Int {
-        store.items.count { $0.isDone }
-    }
-
     // MARK: - Acciones del menu
 
     @objc private func openMainWindow() {
@@ -111,10 +101,6 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     @objc private func openSettings() {
         SettingsWindowController.shared.show()
-    }
-
-    @objc private func archiveDone() {
-        store.clearDone()
     }
 
     @objc private func quit() {

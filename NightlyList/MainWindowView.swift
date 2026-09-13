@@ -16,7 +16,6 @@ struct MainWindowView: View {
         case today
         case open
         case completed
-        case archived
         case all
         case list(String)
     }
@@ -38,7 +37,6 @@ struct MainWindowView: View {
                 sidebarRow(.today, "Today", systemImage: "sun.max")
                 sidebarRow(.open, "Open", systemImage: "circle")
                 sidebarRow(.completed, "Completed", systemImage: "checkmark.circle")
-                sidebarRow(.archived, "Archive", systemImage: "archivebox")
                 sidebarRow(.all, "All", systemImage: "tray.full")
             }
 
@@ -70,8 +68,8 @@ struct MainWindowView: View {
 
     @ViewBuilder
     private var detail: some View {
-        if scope == .archived {
-            archiveList
+        if scope == .completed {
+            completedList
         } else {
             taskList
         }
@@ -105,12 +103,23 @@ struct MainWindowView: View {
         .navigationSubtitle("\(visibleCount) tasks")
     }
 
-    /// El archivo es solo de lectura: es lo que ya se retiro de la lista, y
-    /// esta ahi para consultarlo, no para trastear con ello.
-    private var archiveList: some View {
+    /// Completed junta lo hecho que sigue en la lista activa con lo que ya se
+    /// archivo. Para quien mira, archivar es invisible: es mantenimiento de la
+    /// lista activa, no una carpeta aparte que haya que recordar.
+    private var completedList: some View {
         List {
-            ForEach(store.archived.filter(matchesSearch).sorted { archiveOrder($0, $1) }) { item in
+            ForEach(completedItems) { item in
                 HStack(spacing: 8) {
+                    Button {
+                        store.toggleCompletion(id: item.id)
+                    } label: {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(Color.green)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Mark as open")
+
                     ListDot(listIdentifier: item.listIdentifier, listTitle: item.listTitle)
 
                     if let reference = item.ticketReference {
@@ -123,8 +132,8 @@ struct MainWindowView: View {
 
                     Spacer()
 
-                    if let archivedAt = item.archivedAt {
-                        Text(archivedAt, style: .date)
+                    if let completedAt = item.completedAt {
+                        Text(completedAt, style: .date)
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
@@ -132,18 +141,25 @@ struct MainWindowView: View {
                 .padding(.vertical, 2)
             }
         }
-        .searchable(text: $search, placement: .toolbar, prompt: "Search the archive")
+        .searchable(text: $search, placement: .toolbar, prompt: "Search completed")
         .overlay {
-            if store.archived.filter(matchesSearch).isEmpty {
-                ContentUnavailableView("The archive is empty", systemImage: "archivebox")
+            if completedItems.isEmpty {
+                ContentUnavailableView(
+                    search.isEmpty ? "Nothing completed yet" : "No matches",
+                    systemImage: search.isEmpty ? "checkmark.circle" : "magnifyingglass"
+                )
             }
         }
-        .navigationTitle("Archive")
-        .navigationSubtitle("\(store.archived.count) tasks")
+        .navigationTitle("Completed")
+        .navigationSubtitle("\(completedItems.count) tasks")
     }
 
-    private func archiveOrder(_ lhs: TodoItem, _ rhs: TodoItem) -> Bool {
-        (lhs.archivedAt ?? lhs.createdAt) > (rhs.archivedAt ?? rhs.createdAt)
+    /// De mas reciente a mas antigua: lo ultimo que se cerro es lo que se
+    /// suele venir a mirar.
+    private var completedItems: [TodoItem] {
+        (store.items + store.archived)
+            .filter { $0.isDone && matchesSearch($0) }
+            .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
     }
 
     // MARK: - Filtrado
@@ -165,8 +181,6 @@ struct MainWindowView: View {
             return !item.isDone
         case .completed:
             return item.isDone
-        case .archived:
-            return false
         case .all:
             return true
         case let .list(identifier):
@@ -181,7 +195,7 @@ struct MainWindowView: View {
     }
 
     private func count(in scope: Scope) -> Int {
-        if case .archived = scope { return store.archived.count }
+        if case .completed = scope { return completedItems.count }
         return store.items.count { matchesScope($0, in: scope) }
     }
 
@@ -205,7 +219,6 @@ struct MainWindowView: View {
         case .today: return "Today"
         case .open: return "Open"
         case .completed: return "Completed"
-        case .archived: return "Archive"
         case .all: return "All tasks"
         case let .list(identifier):
             return sync.lists.first { $0.id == identifier }?.title ?? "List"

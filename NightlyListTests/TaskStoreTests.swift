@@ -453,4 +453,64 @@ final class TaskStoreTests: XCTestCase {
 
         XCTAssertEqual(store.items.map(\.title), ["Solo local"])
     }
+
+    // MARK: - Archivado automatico
+
+    private func completed(_ title: String, at fecha: Date) -> TodoItem {
+        var item = TodoItem(title: title)
+        item.completedAt = fecha
+        return item
+    }
+
+    func testOldCompletedTasksAreArchivedOnTheirOwn() {
+        let ahora = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = makeStore()
+        store.items = [
+            completed("Vieja", at: ahora.addingTimeInterval(-10 * 86_400)),
+            completed("Reciente", at: ahora.addingTimeInterval(-2 * 86_400)),
+            TodoItem(title: "Pendiente"),
+        ]
+
+        store.archiveOldCompleted(olderThan: 7, now: ahora)
+
+        XCTAssertEqual(store.items.map(\.title), ["Reciente", "Pendiente"])
+        XCTAssertEqual(store.archived.map(\.title), ["Vieja"])
+        XCTAssertNotNil(store.archived.first?.archivedAt)
+    }
+
+    func testArchivingOldOnesKeepsTheCompletionDate() {
+        let ahora = Date(timeIntervalSince1970: 1_800_000_000)
+        let cuandoSeHizo = ahora.addingTimeInterval(-10 * 86_400)
+        let store = makeStore()
+        store.items = [completed("Vieja", at: cuandoSeHizo)]
+
+        store.archiveOldCompleted(olderThan: 7, now: ahora)
+
+        XCTAssertEqual(store.archived.first?.completedAt, cuandoSeHizo)
+    }
+
+    func testNothingOldEnoughIsANoOp() {
+        let ahora = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = makeStore()
+        store.items = [completed("Reciente", at: ahora.addingTimeInterval(-86_400))]
+
+        store.archiveOldCompleted(olderThan: 7, now: ahora)
+
+        XCTAssertEqual(store.items.count, 1)
+        XCTAssertTrue(store.archived.isEmpty)
+    }
+
+    /// Una pendiente no se archiva por vieja que sea: no tiene fecha de
+    /// completado con la que compararse.
+    func testPendingTasksAreNeverArchivedByAge() {
+        let ahora = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = makeStore()
+        var vieja = TodoItem(title: "Pendiente antigua")
+        vieja.createdAt = ahora.addingTimeInterval(-100 * 86_400)
+        store.items = [vieja]
+
+        store.archiveOldCompleted(olderThan: 7, now: ahora)
+
+        XCTAssertEqual(store.items.map(\.title), ["Pendiente antigua"])
+    }
 }

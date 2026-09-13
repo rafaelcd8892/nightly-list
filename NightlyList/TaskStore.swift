@@ -161,6 +161,33 @@ final class TaskStore: ObservableObject {
         DiagnosticLog.shared.log(.storage, "Archived \(removed.count) completed tasks")
     }
 
+    /// Retira de la lista activa lo completado hace mas de una semana.
+    ///
+    /// Archivar deja de ser un boton. Su unico efecto visible era mover una
+    /// tarea entre dos secciones de la ventana, y eso no es trabajo para el
+    /// usuario. Lo que si hace falta es que la lista activa no crezca sin fin,
+    /// y eso puede pasar solo.
+    func archiveOldCompleted(olderThan days: Int = 7, now: Date = Date()) {
+        guard let limite = Calendar.current.date(byAdding: .day, value: -days, to: now) else { return }
+
+        let viejas = items.filter { item in
+            guard let completedAt = item.completedAt else { return false }
+            return completedAt < limite
+        }
+        guard !viejas.isEmpty else { return }
+
+        let sello = now
+        archived.append(contentsOf: viejas.map { item in
+            var copia = item
+            copia.archivedAt = sello
+            return copia
+        })
+        let porArchivar = Set(viejas.map(\.id))
+        items.removeAll { porArchivar.contains($0.id) }
+
+        DiagnosticLog.shared.log(.storage, "Archived \(viejas.count) tasks completed over \(days) days ago")
+    }
+
     /// Quita del archivo las copias de una misma tarea.
     ///
     /// Un fallo de la sincronizacion devolvia a la lista activa lo que se
@@ -266,6 +293,7 @@ final class TaskStore: ObservableObject {
             if !loaded.items.isEmpty { items = loaded.items }
             if !loaded.archived.isEmpty { archived = loaded.archived }
             repairArchive()
+            archiveOldCompleted()
             storageError = nil
             DiagnosticLog.shared.log(
                 .storage,

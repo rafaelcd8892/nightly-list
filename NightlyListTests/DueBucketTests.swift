@@ -14,9 +14,12 @@ final class DueBucketTests: XCTestCase {
     /// querer.
     private let now = Date(timeIntervalSince1970: 1_800_043_200)  // 2027-01-15 12:00 UTC
 
+    /// createdAt en el pasado por defecto: solo los tests que lo dicen
+    /// explicitamente entran en la regla de "apuntado hoy".
     private func task(due: Date?) -> TodoItem {
         var item = TodoItem(title: "Cualquiera")
         item.dueDate = due
+        item.createdAt = now.addingTimeInterval(-30 * 86_400)
         return item
     }
 
@@ -24,8 +27,20 @@ final class DueBucketTests: XCTestCase {
         DueBucket.of(task(due: now.addingTimeInterval(offsetDays * 86_400)), now: now, calendar: calendar)
     }
 
-    func testATaskWithoutADateHasNoBucket() {
-        XCTAssertEqual(DueBucket.of(task(due: nil), now: now, calendar: calendar), .noDate)
+    /// Lo apuntado hoy cuenta como de hoy aunque no lleve fecha: si no, nacia
+    /// en la ultima seccion y fuera de pantalla.
+    func testATaskWrittenTodayWithoutADateCountsAsToday() {
+        var item = task(due: nil)
+        item.createdAt = now
+
+        XCTAssertEqual(DueBucket.of(item, now: now, calendar: calendar), .today)
+    }
+
+    func testAnOlderTaskWithoutADateHasNoDate() {
+        var item = task(due: nil)
+        item.createdAt = now.addingTimeInterval(-3 * 86_400)
+
+        XCTAssertEqual(DueBucket.of(item, now: now, calendar: calendar), .noDate)
     }
 
     func testYesterdayIsOverdue() {
