@@ -15,10 +15,9 @@ final class TaskStore: ObservableObject {
 
             ReminderScheduler.shared.sync(items)
 
-            // Sincronizar con la app Recordatorios si esta activado
-            Task {
-                await RemindersSync.shared.performFullSync()
-            }
+            // Agrupada: una sola pasada escribe en la lista muchas veces, y
+            // una sincronizacion por escritura se realimenta sola.
+            RemindersSync.shared.scheduleSync()
         }
     }
 

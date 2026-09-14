@@ -47,6 +47,18 @@ final class RemindersSync: ObservableObject {
     /// propiedad vuelve a llamar a performFullSync. Sin esta guarda cada
     /// sincronizacion desencadena otra.
     private var isSyncing = false
+
+    /// La sincronizacion pedida y todavia sin lanzar. Cada escritura en la
+    /// lista pide una, y una pasada escribe muchas veces: sin agrupar salian
+    /// treinta sincronizaciones por segundo, que es como se pierde el control
+    /// de lo que esta pasando.
+    private var pendingSync: Task<Void, Never>?
+
+    /// Tareas que Recordatorios rechazo en esta sesion, para no reintentarlas
+    /// en cada pasada, y recordatorios que ya se han dado por perdidos, para
+    /// no repetir el aviso treinta veces por minuto.
+    private var failedCreations: Set<TodoItem.ID> = []
+    private var reportedAsGone: Set<String> = []
     
     private init() {
         self.authorizationStatus = EKEventStore.authorizationStatus(for: .reminder)
@@ -181,6 +193,17 @@ final class RemindersSync: ObservableObject {
         }
     }
     
+    /// Pide una sincronizacion dentro de un momento, y cancela la que hubiera
+    /// pedida. Muchas peticiones seguidas acaban en una sola pasada.
+    func scheduleSync(after delay: Duration = .milliseconds(400)) {
+        pendingSync?.cancel()
+        pendingSync = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            await self?.performFullSync()
+        }
+    }
+
     /// Envuelve el API de completion handler de EventKit en async/await.
     private func fetchReminders(matching predicate: NSPredicate) async throws -> [EKReminder] {
         try await withCheckedThrowingContinuation { continuation in
@@ -211,14 +234,43 @@ final class RemindersSync: ObservableObject {
             guard let key = dedupeKey(
                 list: reminder.calendar?.calendarIdentifier,
                 title: reminder.title ?? "",
-                isCompleted: reminder.isCompleted
+                completedAt: Self.completionDate(of: reminder)
             ) else { continue }
             if unclaimedByKey[key] == nil { unclaimedByKey[key] = reminder }
         }
 
+        var created = 0
+
         for item in localItems {
-            if let reminderID = item.reminderIdentifier,
-               let existingReminder = remindersByID[reminderID] {
+            if let reminderID = item.reminderIdentifier {
+                // El que no sale en la busqueda se pregunta al almacen antes
+                // de darlo por perdido. La busqueda puede no traerlo porque su
+                // lista esta desactivada, porque iCloud va con retraso, o
+                // porque EventKit todavia no ha publicado el que acabamos de
+                // guardar. Crear otro en ese hueco es lo que llenaba
+                // Recordatorios de copias de la misma tarea.
+                guard let existingReminder = remindersByID[reminderID]
+                        ?? eventStore.calendarItem(withIdentifier: reminderID) as? EKReminder
+                else {
+                    // Ya no existe. Se suelta el enlace para que la tarea
+                    // vuelva a ser una tarea sin sincronizar, y la pasada
+                    // siguiente la adopte o la cree una vez.
+                    //
+                    // Esto antes era el bucle: no encontrarlo llevaba
+                    // derecho a crear otro, en cada pasada y para siempre.
+                    // Ahora no puede repetirse, porque crear verifica que lo
+                    // guardado existe, porque lo que falla no se reintenta en
+                    // esta sesion, y porque antes de crear se busca un
+                    // recordatorio igual al que engancharse.
+                    if reportedAsGone.insert(reminderID).inserted {
+                        DiagnosticLog.shared.log(
+                            .sync,
+                            "Reminder for \"\(item.title)\" is gone; unlinking the task"
+                        )
+                    }
+                    unlink(itemWithID: item.id)
+                    continue
+                }
                 // La lista se reconcilia siempre, no solo cuando hay cambios
                 // que subir: si no, las tareas sincronizadas antes de que
                 // existieran las listas se quedaban sin ella para siempre.
@@ -231,20 +283,53 @@ final class RemindersSync: ObservableObject {
             } else if let key = dedupeKey(
                         list: item.listIdentifier,
                         title: item.title,
-                        isCompleted: item.isDone
+                        completedAt: item.completedAt
                       ),
                       let twin = unclaimedByKey.removeValue(forKey: key) {
-                // Ya hay un recordatorio con ese titulo: se adopta. Crear uno
-                // nuevo es lo que dejaba la tarea por duplicado en los dos
-                // lados.
+                // Ya hay un recordatorio igual: se adopta. Crear uno nuevo es
+                // lo que dejaba la tarea por duplicado en los dos lados.
                 updateLocalItem(item, withReminderID: twin.calendarItemIdentifier)
             } else {
-                // Crear nuevo recordatorio
-                let reminderID = try await createReminder(from: item)
-                updateLocalItem(item, withReminderID: reminderID)
+                // El fusible. Una pasada normal crea las tareas que el usuario
+                // acaba de escribir, que son unas pocas. Cientos significa que
+                // algo se ha ido de las manos, y entonces mas vale pararse y
+                // decirlo que seguir escribiendo en los recordatorios del
+                // usuario.
+                guard created < Self.maxCreationsPerSync else {
+                    lastSyncError = "Sync stopped after creating \(created) reminders in one pass. "
+                        + "Check Reminders for duplicates before turning sync back on."
+                    isSyncEnabled = false
+                    DiagnosticLog.shared.log(
+                        .sync,
+                        "Circuit breaker: stopped after \(created) creations in one pass"
+                    )
+                    return
+                }
+
+                // Lo que ya fallo una vez en esta sesion no se reintenta en
+                // cada pasada: se queda local y se dice una vez.
+                guard !failedCreations.contains(item.id) else { continue }
+
+                do {
+                    let reminderID = try await createReminder(from: item)
+                    created += 1
+                    updateLocalItem(item, withReminderID: reminderID)
+                } catch {
+                    failedCreations.insert(item.id)
+                    lastSyncError = "Reminders did not accept \"\(item.title)\": "
+                        + error.localizedDescription
+                    DiagnosticLog.shared.log(
+                        .sync,
+                        "Could not create reminder for \"\(item.title)\": \(error.localizedDescription)"
+                    )
+                }
             }
         }
     }
+
+    /// Cuantos recordatorios puede crear una sola pasada antes de que se
+    /// asuma que hay un bucle y se pare la sincronizacion.
+    static let maxCreationsPerSync = 25
     
     /// Baja recordatorios de la app Recordatorios a local (crea nuevas o actualiza existentes).
     private func syncRemindersToLocal(
@@ -270,10 +355,10 @@ final class RemindersSync: ObservableObject {
             } else if let key = dedupeKey(
                         list: reminder.calendar?.calendarIdentifier,
                         title: reminder.title ?? "",
-                        isCompleted: reminder.isCompleted
+                        completedAt: Self.completionDate(of: reminder)
                       ),
                       TaskStore.shared.items.contains(where: {
-                          dedupeKey(list: $0.listIdentifier, title: $0.title, isCompleted: $0.isDone) == key
+                          dedupeKey(list: $0.listIdentifier, title: $0.title, completedAt: $0.completedAt) == key
                       }) {
                 // Ya hay una tarea local con ese titulo: o se acaba de enlazar
                 // arriba, o la app Recordatorios tiene el recordatorio por
@@ -297,7 +382,7 @@ final class RemindersSync: ObservableObject {
             guard let key = dedupeKey(
                 list: item.listIdentifier,
                 title: item.title,
-                isCompleted: item.isDone
+                completedAt: item.completedAt
             ) else {
                 merged.append(item)
                 continue
@@ -338,22 +423,28 @@ final class RemindersSync: ObservableObject {
     /// La clave con la que se decide si dos cosas son la misma tarea.
     ///
     /// Lleva la lista delante porque el mismo titulo en dos listas son dos
-    /// tareas legitimas. Y devuelve nil para las completadas: comprar leche
-    /// tres martes distintos son tres hechos con su fecha, no un duplicado.
-    /// Deduplicarlos borraba el historial, que es justo lo que esta app
-    /// existe para guardar.
-    static func dedupeKey(listID: String, title: String, isCompleted: Bool) -> String? {
-        guard !isCompleted else { return nil }
-        return listID + "\u{1}" + normalizedTitle(title)
+    /// tareas legitimas. Y para las completadas lleva ademas el segundo en el
+    /// que se completaron: comprar leche tres martes distintos son tres hechos
+    /// con su fecha y hay que conservar los tres, pero dos cosas con el mismo
+    /// titulo completadas en el mismo segundo son la misma cosa por duplicado.
+    ///
+    /// Antes las completadas no tenian clave, y sin clave no hay duplicado que
+    /// valga: por ahi entraron cuatrocientas copias de la misma nota.
+    static func dedupeKey(listID: String, title: String, completedAt: Date?) -> String? {
+        let base = listID + "\u{1}" + normalizedTitle(title)
+        guard let completedAt else { return base }
+        // Al segundo: EventKit guarda la hora de completado sin decimales, y
+        // la copia local si los tiene.
+        return base + "\u{1}" + String(Int(completedAt.timeIntervalSince1970))
     }
 
     /// Una tarea sin lista se compara contra la de por defecto, que es donde
     /// acabara.
-    private func dedupeKey(list: String?, title: String, isCompleted: Bool) -> String? {
+    private func dedupeKey(list: String?, title: String, completedAt: Date?) -> String? {
         Self.dedupeKey(
             listID: list ?? defaultCalendar().calendarIdentifier,
             title: title,
-            isCompleted: isCompleted
+            completedAt: completedAt
         )
     }
 
@@ -425,9 +516,26 @@ final class RemindersSync: ObservableObject {
             throw SyncError.unauthorized
         }
         
+        // Una tarea que pide una lista va a esa lista o no va. El ?? de antes
+        // la dejaba caer en la de por defecto sin decir nada, y por eso
+        // aparecia en PENDIENTES lo que se habia escrito estando en TRABAJO.
+        let destino: EKCalendar
+        if let listID = item.listIdentifier {
+            guard let elegida = calendar(withID: listID) else {
+                DiagnosticLog.shared.log(
+                    .sync,
+                    "List \(item.listTitle ?? listID) not found; \"\(item.title)\" stays local"
+                )
+                throw SyncError.listNotFound(item.listTitle ?? listID)
+            }
+            destino = elegida
+        } else {
+            destino = defaultCalendar()
+        }
+
         let reminder = EKReminder(eventStore: eventStore)
         reminder.title = item.title
-        reminder.calendar = calendar(withID: item.listIdentifier) ?? defaultCalendar()
+        reminder.calendar = destino
         applyDetails(of: item, to: reminder)
         // completionDate manda: asignarla ya deja isCompleted en true, y
         // conserva el "cuando" en vez de solo el "si".
@@ -447,8 +555,18 @@ final class RemindersSync: ObservableObject {
         
         // Guardar en la app Recordatorios
         try eventStore.save(reminder, commit: true)
-        
-        return reminder.calendarItemIdentifier
+
+        // Y comprobar que existe. save() puede devolver sin error y dejar un
+        // recordatorio que luego no esta: es lo que paso al guardar muchos
+        // seguidos, y el identificador que devolvia no apuntaba a nada. Ese
+        // identificador fantasma, guardado en la tarea, hacia que la pasada
+        // siguiente no lo encontrara y creara otro, y otro, sin parar.
+        let identifier = reminder.calendarItemIdentifier
+        guard eventStore.calendarItem(withIdentifier: identifier) != nil else {
+            throw SyncError.notPersisted
+        }
+
+        return identifier
     }
     
     /// Actualiza un recordatorio existente con los datos de una tarea local.
@@ -535,6 +653,14 @@ final class RemindersSync: ObservableObject {
         TaskStore.shared.items[index] = item
     }
     
+    /// Suelta el enlace con un recordatorio que ya no existe.
+    private func unlink(itemWithID id: TodoItem.ID) {
+        guard let index = TaskStore.shared.items.firstIndex(where: { $0.id == id }),
+              TaskStore.shared.items[index].reminderIdentifier != nil
+        else { return }
+        TaskStore.shared.items[index].reminderIdentifier = nil
+    }
+
     /// Actualiza una tarea local con el ID del recordatorio tras crearlo o
     /// adoptarlo. Se lleva tambien la lista: al adoptar, la del recordatorio
     /// manda; al crear, es la que acaba de recibir.
@@ -678,12 +804,8 @@ final class RemindersSync: ObservableObject {
     /// Maneja cambios externos en la app Recordatorios.
     @objc private func handleExternalChange() {
         guard isSyncEnabled else { return }
-        
-        Task {
-            // Esperar un poco para agrupar cambios rapidos
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 segundo
-            await performFullSync()
-        }
+        // Un segundo: los cambios de Recordatorios llegan a rafagas.
+        scheduleSync(after: .seconds(1))
     }
     
     // MARK: - Public Sync Triggers
@@ -798,13 +920,19 @@ final class RemindersSync: ObservableObject {
 enum SyncError: LocalizedError {
     case unauthorized
     case reminderNotFound
-    
+    case listNotFound(String)
+    case notPersisted
+
     var errorDescription: String? {
         switch self {
         case .unauthorized:
             return "No permission to access Reminders"
         case .reminderNotFound:
             return "Reminder not found"
+        case let .listNotFound(title):
+            return "The list \"\(title)\" is not in Reminders any more"
+        case .notPersisted:
+            return "Reminders reported it saved the task but it is not there"
         }
     }
 }
