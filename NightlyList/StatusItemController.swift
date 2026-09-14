@@ -15,11 +15,18 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let store: TaskStore
     private var cancellables: Set<AnyCancellable> = []
 
+    /// Los vigilantes del clic fuera, solo mientras el popover esta abierto.
+    private var outsideClickMonitors: [Any] = []
+
     init(store: TaskStore) {
         self.store = store
         super.init()
 
-        popover.behavior = .transient
+        // .applicationDefined y no .transient: el cierre lo decide esta clase.
+        // Un popover transitorio que se abre sin activar la app depende de que
+        // el sistema le de el foco para saber cuando se pincho fuera, y sin
+        // foco ese cierre no llega. Los monitores de abajo lo hacen explicito.
+        popover.behavior = .applicationDefined
         popover.animates = false
         popover.delegate = self
         popover.contentViewController = NSHostingController(rootView: TaskListView(store: store))
@@ -30,6 +37,19 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             // Sin esto solo llega el clic izquierdo y el derecho se pierde.
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+
+        // Abrir Ajustes o los detalles desde el propio popover no genera
+        // ningun clic fuera, asi que sin esto el popover se quedaba flotando
+        // por delante de la ventana que acababa de abrir.
+        NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] note in
+                guard let self, self.popover.isShown else { return }
+                guard note.object as? NSWindow !== self.popover.contentViewController?.view.window
+                else { return }
+                self.popover.performClose(nil)
+            }
+            .store(in: &cancellables)
 
         refreshImage()
         // El numero del icono tiene que seguir a la lista.
@@ -42,7 +62,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     /// @objc explicito: popoverDidClose es un metodo opcional de un protocolo
     /// de ObjC, y sin la marca el runtime no lo encuentra.
     @objc nonisolated func popoverDidClose(_ notification: Notification) {
-        Task { @MainActor in PopoverSession.shared.didClose() }
+        Task { @MainActor in
+            self.stopWatchingForOutsideClicks()
+            PopoverSession.shared.didClose()
+        }
     }
 
     // MARK: - Clics
@@ -66,10 +89,55 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             return
         }
 
-        // El campo de texto del popover no recibe teclas si la app no esta
-        // activa, y una app LSUIElement no se activa sola.
-        NSApp.activate(ignoringOtherApps: true)
+        // Sin NSApp.activate: abrir la lista no tiene por que sacar de la
+        // ventana en la que estabas. La app se queda de fondo y el Xcode, el
+        // navegador o lo que fuera conserva el foco y el cursor donde estaba.
+        //
+        // El precio es que el campo "New task" no recibe teclas hasta que se
+        // pincha dentro, porque una app inactiva no recibe el teclado. Pinchar
+        // dentro activa la app sola, asi que el coste real es un clic, y solo
+        // cuando se va a escribir. Para escribir sin tocar el raton esta el
+        // atajo, que si activa la app a proposito.
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        startWatchingForOutsideClicks()
+    }
+
+    // MARK: - Cerrar al pinchar fuera
+
+    /// Cierra el popover al primer clic fuera, dentro o fuera de esta app.
+    ///
+    /// El monitor global recoge los clics que van a otras apps; el local, los
+    /// que van a otra ventana de esta. Los del propio icono de la barra no
+    /// cuentan: de esos ya se encarga togglePopover, y cerrar aqui haria que
+    /// el clic siguiente lo volviera a abrir.
+    private func startWatchingForOutsideClicks() {
+        stopWatchingForOutsideClicks()
+
+        let buttons: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: buttons) { [weak self] _ in
+            Task { @MainActor in self?.popover.performClose(nil) }
+        } {
+            outsideClickMonitors.append(global)
+        }
+
+        if let local = NSEvent.addLocalMonitorForEvents(matching: buttons) { [weak self] event in
+            guard let self else { return event }
+            let popoverWindow = self.popover.contentViewController?.view.window
+            let statusWindow = self.statusItem.button?.window
+
+            if event.window !== popoverWindow, event.window !== statusWindow {
+                Task { @MainActor in self.popover.performClose(nil) }
+            }
+            return event
+        } {
+            outsideClickMonitors.append(local)
+        }
+    }
+
+    private func stopWatchingForOutsideClicks() {
+        outsideClickMonitors.forEach(NSEvent.removeMonitor)
+        outsideClickMonitors.removeAll()
     }
 
     private func showMenu() {
